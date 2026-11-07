@@ -11,10 +11,10 @@ voice-harness/
     └── MVP_SPEC.md    # MVP scope, architecture, build order, open questions
 ```
 
-Planned (per `docs/MVP_SPEC.md` §4; created when the corresponding milestone starts): `extension/` (VS Code extension, TypeScript), `core/` (ACP client + MCP tools, TypeScript, no VS Code imports), `voice/` (Python voice process), `spike/` (M0 throwaway).
+Planned (per `docs/MVP_SPEC.md` §4; created when the corresponding milestone starts): `extension/` (VS Code extension, TypeScript), `core/` (ACP client + MCP tools, TypeScript, no VS Code imports), `voice/` (Swift voice process, Swift Package Manager), `spike/` (M0 and M0b throwaways).
 
 ## Naming Conventions
 
 - Directories: lowercase, kebab-case.
 - Docs: `UPPER_SNAKE.md` for standing project documents in `docs/`.
-- TypeScript: camelCase files; Python: snake_case modules.
+- TypeScript: camelCase files; Swift: UpperCamelCase type-named files.

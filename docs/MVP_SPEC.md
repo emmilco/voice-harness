@@ -41,19 +41,23 @@ Three parts, deliberately separated so the VS Code part stays thin (a later Zed 
  └───────┬───────────────────────────────┬──────────────────┘
          │ local socket                  │ local socket
  ┌───────┴─────────────┐        ┌────────┴──────────────────┐
- │ Core (TypeScript,   │        │ Voice process (Python)    │
- │ Node)               │        │  • mic + VAD (Silero)     │
- │  • ACP client       │        │  • STT (faster-whisper)   │
- │  • spawns           │        │  • TTS (Kokoro), sentence │
- │   claude-agent-acp  │        │    queue, pause/resume    │
- │  • routes agent     │        │  • barge-in + backchannel │
- │    text → speech    │        │    filter                 │
- │  • editor/figure    │        └───────────────────────────┘
- │    MCP tools        │
- └─────────────────────┘
+ │ Core (TypeScript,   │        │ Voice process (Swift CLI) │
+ │ Node)               │        │  Neural Engine, no GPU:   │
+ │  • ACP client       │        │  • mic + VAD (Silero,     │
+ │  • spawns           │        │    via FluidAudio)        │
+ │   claude-agent-acp  │        │  • STT (Apple             │
+ │  • routes agent     │        │    SpeechAnalyzer)        │
+ │    text → speech    │        │  • TTS (Kokoro via        │
+ │  • editor/figure    │        │    FluidAudio), sentence  │
+ │    MCP tools        │        │    queue, pause/resume    │
+ └─────────────────────┘        │  • barge-in + backchannel │
+                                │    filter                 │
+                                └───────────────────────────┘
 ```
 
-**Decision to confirm — where the core lives.** Proposed: the core runs *inside* the extension host process at first (simplest), but is written as a separate module with no VS Code imports, so it can be split out later. Alternative: a standalone daemon from day one (cleaner portability, more moving parts).
+**Decided — where the core lives.** The core runs *inside* the extension host process (fewest moving parts), written as a module with no VS Code imports so it can be split into a daemon later.
+
+**Decided — voice on the Neural Engine.** STT, TTS and VAD run on the Apple Neural Engine, never the GPU, so the voice loop does not contend with LLM training and stays outside gpu-broker's scope. Gated by the M0b check (§6); fallback if M0b fails: a Python voice process running faster-whisper and Kokoro on CPU.
 
 ### 4.1 Agent connection (ACP)
 
@@ -71,7 +75,7 @@ Passed to the agent at session start. All are **display-only** — they change w
 | `clear_highlight()` | Remove highlights. |
 | `show_figure(kind, content, caption)` | Render a figure in the chat pane. `kind` ∈ `vega-lite` (charts), `svg`, `mermaid` (diagrams), `image` (a PNG/SVG file path in the workspace, e.g. a matplotlib output). |
 
-**Decision to confirm — MCP transport.** ACP agents must support local stdio MCP servers; HTTP is optional. Proposed: a tiny stdio MCP server the agent launches, which relays calls to the extension over a local socket. Alternative: an HTTP MCP server inside the extension (one fewer process, but relies on optional support).
+**Decided — MCP transport.** A tiny stdio MCP server the agent launches, relaying calls to the extension over a local socket. (ACP agents must support stdio MCP servers; HTTP support is optional.)
 
 ### 4.3 Speech vs screen
 
@@ -92,7 +96,7 @@ ACP permission requests appear as buttons in the chat pane and block until click
 ## 5. Isolation classification (AISP)
 
 - Claude via ACP: attended, acting (shell/writes), main account; permission prompts always surfaced; no bypass modes. Compliant.
-- STT/TTS models: fixed-prompt (audio → text, text → audio; no actions) → main account.
+- STT/TTS/VAD models: fixed-prompt (audio → text, text → audio; no actions) → main account, on the Neural Engine.
 - Future local open-weight agents: agentic → must run in the `aiuser` sandbox. Out of MVP scope; the core's agent-launch code should allow a launch-as-different-user command when that arrives.
 
 ## 6. Build order
@@ -100,6 +104,7 @@ ACP permission requests appear as buttons in the chat pane and block until click
 | Step | What | Done when |
 |---|---|---|
 | M0 — spike | Plain Node script: ACP client ↔ `claude-agent-acp`; one prompt; one MCP tool round-trip; billing guard | Claude answers on subscription login and successfully calls a dummy `show_code` tool |
+| M0b — voice check | Minimal Swift CLI: Kokoro via FluidAudio speaks a sentence; SpeechAnalyzer transcribes a recorded question; report time-to-first-audio, transcription latency, and stability on this machine's macOS 27 | Both run without crashes and latency is acceptable to Elliot; otherwise switch to the CPU/Python fallback |
 | M1 — panel | Extension with webview chat (typed input), editor tools, permission buttons | Scenario steps 3, 5, 8 work with typed input |
 | M2 — speaking | Voice process TTS of agent prose, sentence-streamed | Step 4 works |
 | M3 — listening | STT, talk key, barge-in, backchannel filter | Steps 2, 7 work |
@@ -109,8 +114,6 @@ Each step ends with a short demo to Elliot before the next starts.
 
 ## 7. Open questions
 
-1. **GPU broker:** QMS §9.3 routes GPU-intensive work (incl. TTS) through gpu-broker, which is a batch queue — wrong shape for real-time speech. Proposed: run Kokoro and faster-whisper on **CPU** (both are small; faster-whisper has no Metal backend anyway), keeping them outside the broker's scope. Needs Elliot's decision if CPU latency turns out too high.
-2. Core in extension host vs separate daemon (§4).
-3. MCP transport: stdio relay vs HTTP (§4.2).
-4. Anthropic terms on subscription use through a self-built client for personal use — not yet checked.
-5. TTS voice choice — reuse yahp's audition script.
+1. Anthropic terms on subscription use through a self-built client for personal use — not yet checked.
+2. FluidAudio's license and macOS 27 compatibility (its release notes flag Kokoro crashes on some macOS 26 builds) — checked in M0b.
+3. TTS voice choice among Kokoro's voices.
