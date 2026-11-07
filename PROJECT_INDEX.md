@@ -49,7 +49,11 @@ voice-harness/
     └── m0b/           # Swift voice check: Kokoro TTS (FluidAudio) + Apple SpeechAnalyzer STT; RESULTS.md
 ```
 
-Setup: `npm install --ignore-scripts && npm run build` (builds the TypeScript bundles and the Swift voice process). Run: open this folder in VS Code and press F5.
+Setup: `npm install --ignore-scripts && npm run build` (builds the TypeScript bundles and the Swift voice process).
+
+Everyday use (development install): `~/.vscode/extensions/emmilco.voice-harness-0.1.0` is a symlink to `extension/`, so the extension loads in every VS Code window and uses this repo's `node_modules/` and `voice/.build/`. Open any folder, then run **Voice Harness: Open Panel**. After changing code: `npm run build`, then **Developer: Reload Window** in open windows. A broken build here breaks the panel everywhere; a packaged `.vsix` install is the planned replacement once the harness is stable.
+
+Development: open this folder in VS Code and press F5 (Extension Development Host on `spike/m0/fixture`; the development copy takes precedence over the installed link).
 
 Run the M0 spike: `cd spike/m0 && npm ci --ignore-scripts && node client.mjs ["optional prompt"]`.
 

@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { existsSync } from "node:fs";
+import { existsSync, realpathSync } from "node:fs";
 import path from "node:path";
 import * as vscode from "vscode";
 import {
@@ -388,8 +388,9 @@ export class HarnessPanel implements vscode.Disposable {
 
   // MARK: Webview
 
+  /** The repository root. The extension may be installed as a link to `<repo>/extension`, so links are resolved first. */
   private get repoRoot(): string {
-    return path.resolve(this.context.extensionPath, "..");
+    return path.resolve(realpathSync(this.context.extensionPath), "..");
   }
 
   private html(): string {
