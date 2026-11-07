@@ -1,0 +1,16 @@
+{
+  "name": "@voice-harness/core",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Editor-independent harness core: ACP agent session, billing guard, display-tool MCP server and relay.",
+  "main": "src/index.ts",
+  "scripts": {
+    "smoke": "esbuild scripts/smoke.ts --bundle --platform=node --format=esm --outfile=scripts/.smoke.mjs --log-level=warning && node scripts/.smoke.mjs"
+  },
+  "dependencies": {
+    "@agentclientprotocol/claude-agent-acp": "0.101.0",
+    "@agentclientprotocol/sdk": "2.4.0",
+    "@modelcontextprotocol/sdk": "1.32.2",
+    "zod": "4.6.7"
+  }
+}

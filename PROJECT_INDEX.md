@@ -7,22 +7,38 @@ VS Code–based voice + code learning environment: talk aloud with a coding agen
 ```
 voice-harness/
 ├── PROJECT_INDEX.md   # this file
+├── package.json       # npm workspace root (core, extension); scripts: build, check, smoke
 ├── experiment_log.md  # append-only log of failed/diagnosed attempts (QMS §7.3)
+├── .vscode/           # launch.json (F5 → Extension Development Host on spike/m0/fixture), tasks.json (build)
+├── core/              # editor-independent harness core (TypeScript, no VS Code imports)
+│   ├── src/
+│   │   ├── agentSession.ts  # ACP session with claude-agent-acp: start, prompt, cancel, handlers
+│   │   ├── billingGuard.ts  # refuses per-token billing configurations
+│   │   ├── relay.ts         # Unix-socket relay from the MCP server to the front end
+│   │   ├── mcpServer.ts     # stdio MCP server: show_code, clear_highlight (bundled to extension/dist)
+│   │   ├── speechLayer.ts   # system-prompt text appended to Claude Code's standard prompt
+│   │   └── index.ts         # public exports
+│   └── scripts/smoke.ts     # headless one-turn test (`npm run smoke`, after `npm run build`)
+├── extension/         # VS Code extension (thin presentation layer)
+│   ├── package.json   # extension manifest: commands, settings
+│   ├── esbuild.mjs    # bundles extension.js, mcpServer.mjs, webview.js into dist/ (gitignored)
+│   ├── src/
+│   │   ├── extension.ts     # activation, commands
+│   │   ├── panel.ts         # chat panel: owns the session, permissions, webview HTML/CSP
+│   │   ├── editorControl.ts # show_code highlight and follow-along reveal
+│   │   ├── protocol.ts      # extension ↔ webview message types
+│   │   └── toolchain.ts     # resolves node / claude via settings or a login shell
+│   └── webview/       # main.ts (chat UI, markdown-it, `onscreen` blocks), style.css
 ├── docs/              # specs and design documents
 │   └── MVP_SPEC.md    # MVP scope, architecture, build order, open questions
 └── spike/             # throwaway milestone spikes (not product code)
-    ├── m0/            # ACP client ↔ claude-agent-acp + stdio MCP display tool
-    │   ├── client.mjs     # billing guard, ACP client, permission policy, socket relay
-    │   ├── mcp-tool.mjs   # stdio MCP server exposing show_code, relays to client
-    │   ├── fixture/       # tiny_gpt.py — workspace the agent is pointed at
-    │   └── package.json   # exact-pinned deps (node_modules/ gitignored)
-    └── m0b/           # Swift voice check: Kokoro TTS (FluidAudio) + Apple SpeechAnalyzer STT
-        ├── Package.swift          # FluidAudio pinned exactly, TTS trait
-        ├── Sources/VoiceCheck/    # main.swift — `tts`, `stt`, `voices`, `listen` subcommands
-        └── RESULTS.md             # measured timings and findings
+    ├── m0/            # ACP client ↔ claude-agent-acp + stdio MCP display tool; fixture/ is the demo workspace
+    └── m0b/           # Swift voice check: Kokoro TTS (FluidAudio) + Apple SpeechAnalyzer STT; RESULTS.md
 ```
 
-Planned (per `docs/MVP_SPEC.md` §4; created when the corresponding milestone starts): `extension/` (VS Code extension, TypeScript), `core/` (ACP client + MCP tools, TypeScript, no VS Code imports), `voice/` (Swift voice process, Swift Package Manager).
+Planned (per `docs/MVP_SPEC.md` §4): `voice/` (Swift voice process, Swift Package Manager), from M2.
+
+Setup: `npm install --ignore-scripts && npm run build`. Run: open this folder in VS Code and press F5.
 
 Run the M0 spike: `cd spike/m0 && npm ci --ignore-scripts && node client.mjs ["optional prompt"]`.
 

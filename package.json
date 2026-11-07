@@ -1,0 +1,10 @@
+{
+  "name": "voice-harness",
+  "private": true,
+  "workspaces": ["core", "extension"],
+  "scripts": {
+    "build": "npm run build -w extension",
+    "check": "tsc -p core --noEmit && tsc -p extension --noEmit",
+    "smoke": "npm run smoke -w core"
+  }
+}

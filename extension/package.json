@@ -1,0 +1,54 @@
+{
+  "name": "voice-harness",
+  "displayName": "Voice Harness",
+  "description": "Talk with a coding agent while it steers the editor and shows figures inline.",
+  "version": "0.1.0",
+  "publisher": "emmilco",
+  "private": true,
+  "license": "UNLICENSED",
+  "engines": {
+    "vscode": "^1.145.0"
+  },
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "voiceHarness.openPanel",
+        "title": "Voice Harness: Open Panel"
+      },
+      {
+        "command": "voiceHarness.restartSession",
+        "title": "Voice Harness: Restart Session"
+      }
+    ],
+    "configuration": {
+      "title": "Voice Harness",
+      "properties": {
+        "voiceHarness.nodePath": {
+          "type": "string",
+          "default": "",
+          "description": "Absolute path to the node binary. Empty: resolve via a login shell."
+        },
+        "voiceHarness.claudePath": {
+          "type": "string",
+          "default": "",
+          "description": "Absolute path to the claude CLI. Empty: resolve via a login shell."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "node esbuild.mjs"
+  },
+  "dependencies": {
+    "@voice-harness/core": "0.1.0",
+    "markdown-it": "15.0.3"
+  },
+  "devDependencies": {
+    "@types/markdown-it": "14.2.0",
+    "@types/node": "24.19.2",
+    "@types/vscode": "1.145.0",
+    "esbuild": "0.28.2",
+    "typescript": "7.0.2"
+  }
+}
