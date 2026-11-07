@@ -79,6 +79,7 @@ Passed to the agent at session start. All are **display-only** — they change w
 
 ### 4.3 Speech vs screen
 
+- **Instruction layering (decided).** Harness sessions load Elliot's normal Claude Code setup, including the global `CLAUDE.md` (QMS), *plus* a harness speech layer appended to the session prompt. The speech layer tells the agent: talk in prose; keep spoken replies short; use `show_code` / `show_figure` to point at things; put QMS ritual output (status lines, provenance lines, question blocks) on screen in a marked block that is shown but not spoken. How the adapter accepts an appended prompt (likely `_meta.claudeCode.options`) is verified in M1.
 - The agent is told (session prompt) to talk in prose and put code, numbers-heavy content and diagrams on screen via tools or code blocks.
 - The voice process speaks only prose: code blocks, tables and figure content are shown, not read. (Carried over from yahp's `<<show>>` idea.)
 - Speech is sentence-streamed: TTS starts on the first complete sentence, not the whole reply.
@@ -91,7 +92,7 @@ Passed to the agent at session start. All are **display-only** — they change w
 
 ### 4.5 Permissions
 
-ACP permission requests appear as buttons in the chat pane and block until clicked. **They are not approvable by voice** in the MVP — a misheard "yes" should never grant a tool call (AISP: the human gate must be real).
+Harness sessions use Elliot's normal Claude Code allow-list (decided): anything it pre-approves runs without a prompt, exactly as in a terminal session (observed in M0). Everything else arrives as an ACP permission request, shown as buttons in the chat pane, blocking until clicked. **They are not approvable by voice** in the MVP — a misheard "yes" should never grant a tool call (AISP: the human gate must be real).
 
 ## 5. Isolation classification (AISP)
 

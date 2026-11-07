@@ -1,0 +1,12 @@
+{
+  "name": "voice-harness-spike-m0",
+  "private": true,
+  "type": "module",
+  "description": "M0 spike: ACP client to claude-agent-acp with a stdio MCP display tool relayed over a local socket.",
+  "dependencies": {
+    "@agentclientprotocol/claude-agent-acp": "0.101.0",
+    "@agentclientprotocol/sdk": "2.4.0",
+    "@modelcontextprotocol/sdk": "1.32.2",
+    "zod": "4.6.7"
+  }
+}
