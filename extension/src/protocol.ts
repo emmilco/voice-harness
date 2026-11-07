@@ -2,14 +2,20 @@
 
 export type SessionState = "starting" | "ready" | "busy" | "error" | "stopped";
 
+export type VoiceUiState = "loading" | "idle" | "listening" | "speaking" | "interrupted" | "unavailable";
+
 export type ToWebview =
   | { type: "state"; state: SessionState; detail?: string }
-  | { type: "user"; text: string }
+  | { type: "voice"; state: VoiceUiState; speak: boolean; microphone: boolean; detail?: string }
+  | { type: "partial"; text: string; source: "user" | "interruption" | null }
+  | { type: "level"; db: number }
+  | { type: "user"; text: string; spoken: boolean }
   | { type: "agentText"; chunk: string }
   | { type: "turnEnd"; stopReason: string }
   | { type: "tool"; id: string; title?: string; kind?: string; status?: string; isUpdate: boolean }
   | { type: "permission"; requestId: string; title: string; kind?: string; options: { optionId: string; name: string; kind: string }[] }
   | { type: "permissionDone"; requestId: string }
+  | { type: "notice"; text: string }
   | { type: "error"; text: string };
 
 export type FromWebview =
@@ -17,4 +23,6 @@ export type FromWebview =
   | { type: "send"; text: string }
   | { type: "stop" }
   | { type: "restart" }
+  | { type: "talk" }
+  | { type: "toggleSpeak" }
   | { type: "permission"; requestId: string; optionId: string | null };

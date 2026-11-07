@@ -1,10 +1,14 @@
 {
   "name": "voice-harness",
   "private": true,
-  "workspaces": ["core", "extension"],
+  "workspaces": [
+    "core",
+    "extension"
+  ],
   "scripts": {
-    "build": "npm run build -w extension",
+    "build": "npm run build -w extension && swift build -c release --package-path voice",
     "check": "tsc -p core --noEmit && tsc -p extension --noEmit",
-    "smoke": "npm run smoke -w core"
+    "smoke": "npm run smoke -w core",
+    "unit": "npm run unit -w core"
   }
 }

@@ -19,6 +19,10 @@
       {
         "command": "voiceHarness.restartSession",
         "title": "Voice Harness: Restart Session"
+      },
+      {
+        "command": "voiceHarness.toggleListening",
+        "title": "Voice Harness: Talk (start/stop listening)"
       }
     ],
     "configuration": {
@@ -33,9 +37,36 @@
           "type": "string",
           "default": "",
           "description": "Absolute path to the claude CLI. Empty: resolve via a login shell."
+        },
+        "voiceHarness.voice": {
+          "type": "string",
+          "default": "af_heart",
+          "description": "Kokoro voice for spoken replies."
+        },
+        "voiceHarness.speakReplies": {
+          "type": "boolean",
+          "default": true,
+          "description": "Speak Claude's replies aloud when the panel opens."
+        },
+        "voiceHarness.echoCancellation": {
+          "type": "boolean",
+          "default": false,
+          "description": "Use macOS voice processing to cancel the speech echo, for use without headphones. Takes effect when the panel is reopened."
+        },
+        "voiceHarness.modelsDirectory": {
+          "type": "string",
+          "default": "/Users/Shared/ai/models/fluidaudio",
+          "description": "Model store holding the FluidAudio models (MLP-governed)."
         }
       }
-    }
+    },
+    "keybindings": [
+      {
+        "command": "voiceHarness.toggleListening",
+        "key": "ctrl+shift+space",
+        "mac": "ctrl+shift+space"
+      }
+    ]
   },
   "scripts": {
     "build": "node esbuild.mjs"

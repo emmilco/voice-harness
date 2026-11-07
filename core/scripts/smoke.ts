@@ -5,15 +5,18 @@ import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { AgentSession, SPEECH_LAYER } from "../src/index";
+import { AgentSession, SPEECH_LAYER, SpeechChunker, VoiceClient } from "../src/index";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, "..", "..");
 const WORKSPACE = path.join(ROOT, "spike", "m0", "fixture");
 const MCP = path.join(ROOT, "extension", "dist", "mcpServer.mjs");
 const AGENT = path.join(ROOT, "node_modules", "@agentclientprotocol", "claude-agent-acp", "dist", "index.js");
+// --speak: also speak the reply through the chunker and the voice process (plays audio).
+const SPEAK = process.argv.includes("--speak");
+const VOICE_BIN = path.join(ROOT, "voice", ".build", "release", "VoiceHarnessVoice");
 const PROMPT =
-  process.argv[2] ??
+  process.argv.slice(2).find((a) => !a.startsWith("--")) ??
   "Show me where the loss is computed in tiny_gpt.py and tell me in two sentences why the logits get reshaped.";
 
 for (const f of [MCP, AGENT]) if (!existsSync(f)) throw new Error(`missing ${f} (run npm install && npm run build)`);
@@ -22,6 +25,33 @@ const t0 = Date.now();
 const log = (tag: string, msg: string) => console.log(`[${((Date.now() - t0) / 1000).toFixed(1)}s ${tag}] ${msg}`);
 let text = "";
 let shown = 0;
+const chunker = new SpeechChunker();
+const spoken: string[] = [];
+let voiceIdle: () => void = () => {};
+let voiceReady: () => void = () => {};
+const ready = new Promise<void>((r) => (voiceReady = r));
+const voice = SPEAK
+  ? VoiceClient.start({
+      binary: VOICE_BIN,
+      modelsDirectory: "/Users/Shared/ai/models/fluidaudio",
+      voice: "af_heart",
+      voiceProcessing: false,
+      onEvent: (e) => {
+        if (e.event === "ready") voiceReady();
+        if (e.event === "speechIdle") voiceIdle();
+        if (e.event === "spoke") log("voice", `spoke #${e.id}`);
+        if (e.event === "error" || e.event === "fatal") log("voice", e.message);
+      },
+      onExit: (r) => log("voice", r),
+    })
+  : undefined;
+const say = (sentences: string[]) => {
+  for (const s of sentences) {
+    spoken.push(s);
+    log("speak", `#${voice?.speak(s)} ${s}`);
+  }
+};
+if (voice) await ready;
 
 const session = await AgentSession.start({
   workspace: WORKSPACE,
@@ -31,8 +61,12 @@ const session = await AgentSession.start({
   mcpServerScript: MCP,
   systemPromptAppend: SPEECH_LAYER,
   handlers: {
-    onText: (c) => (text += c),
+    onText: (c) => {
+      text += c;
+      if (voice) say(chunker.push(c));
+    },
     onToolCall: (t, isUpdate) => {
+      if (!isUpdate && voice) say(chunker.flush());
       if (!isUpdate) log("tool", `${t.title} [${t.kind}]${t.locations.length ? " @ " + t.locations.map((l) => `${path.basename(l.path)}:${l.line ?? "?"}`).join(", ") : ""}`);
     },
     onPermission: async (req) => {
@@ -52,8 +86,16 @@ const session = await AgentSession.start({
 log("session", `${session.sessionId} (${session.loginSummary})`);
 
 const stop = await session.prompt(PROMPT);
+if (voice) {
+  say(chunker.flush());
+  await new Promise<void>((r) => {
+    voiceIdle = r;
+    setTimeout(r, 60_000);
+  });
+  voice.dispose();
+}
 log("claude", text.trim());
 log("turn", `stopReason=${stop}`);
-log("check", `show_code calls: ${shown}; onscreen block present: ${text.includes("```onscreen")}`);
+log("check", `show_code calls: ${shown}; onscreen block present: ${text.includes("```onscreen")}${voice ? `; sentences spoken: ${spoken.length}` : ""}`);
 session.dispose();
 process.exit(shown > 0 ? 0 : 1);

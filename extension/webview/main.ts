@@ -21,6 +21,24 @@ const input = document.getElementById("input") as HTMLTextAreaElement;
 const sendButton = document.getElementById("send") as HTMLButtonElement;
 const stopButton = document.getElementById("stop") as HTMLButtonElement;
 const restartButton = document.getElementById("restart") as HTMLButtonElement;
+const talkButton = document.getElementById("talk") as HTMLButtonElement;
+const speakButton = document.getElementById("speak") as HTMLButtonElement;
+const voiceChip = document.getElementById("voice")!;
+const partial = document.getElementById("partial")!;
+
+const VOICE_LABELS: Record<string, string> = {
+  loading: "Voice loading…",
+  idle: "Voice ready",
+  listening: "● Listening — press Talk again when done",
+  speaking: "Speaking",
+  interrupted: "Paused — you're speaking",
+  unavailable: "Voice unavailable",
+};
+let voiceUsable = false;
+let voiceText = "";
+const meter = document.createElement("span");
+meter.className = "meter";
+let listening = false;
 
 let ready = false;
 let busy = false;
@@ -62,8 +80,11 @@ function endAgentMessage(): void {
 
 function updateControls(): void {
   sendButton.disabled = !ready || busy;
-  stopButton.disabled = !busy;
+  stopButton.disabled = !busy && !listening;
   input.disabled = !ready;
+  talkButton.disabled = !ready || !voiceUsable;
+  talkButton.textContent = listening ? "■ Done" : "🎙 Talk";
+  talkButton.classList.toggle("listening", listening);
 }
 
 function send(): void {
@@ -85,9 +106,37 @@ window.addEventListener("message", (event: MessageEvent<ToWebview>) => {
       updateControls();
       if (m.state === "ready") input.focus();
       break;
-    case "user":
+    case "user": {
       endAgentMessage();
-      append(div("message user", m.text));
+      const bubble = div("message user", m.text);
+      if (m.spoken) bubble.classList.add("spoken");
+      append(bubble);
+      break;
+    }
+    case "voice":
+      voiceUsable = m.microphone && m.state !== "loading" && m.state !== "unavailable";
+      listening = m.state === "listening";
+      voiceChip.className = `voice ${m.state}`;
+      voiceText = (VOICE_LABELS[m.state] ?? m.state) + (m.detail ? ` — ${m.detail}` : "");
+      voiceChip.textContent = voiceText;
+      meter.textContent = "";
+      if (m.state === "listening" || m.state === "interrupted") voiceChip.appendChild(meter);
+      speakButton.textContent = m.speak ? "🔊 Voice on" : "🔇 Voice off";
+      updateControls();
+      break;
+    case "level": {
+      // -60 dBFS (silence) .. 0 dBFS (loud) mapped to 0..10 bars.
+      const bars = Math.max(0, Math.min(10, Math.round((m.db + 60) / 6)));
+      meter.textContent = ` ${"▮".repeat(bars)}${"▯".repeat(10 - bars)}`;
+      break;
+    }
+    case "partial":
+      partial.hidden = !m.text;
+      partial.textContent = m.text;
+      partial.className = `partial ${m.source ?? ""}`;
+      break;
+    case "notice":
+      append(div("notice", m.text));
       break;
     case "agentText":
       if (!agentBubble) {
@@ -160,6 +209,8 @@ input.addEventListener("keydown", (e) => {
 });
 sendButton.addEventListener("click", send);
 stopButton.addEventListener("click", () => vscode.postMessage({ type: "stop" }));
+talkButton.addEventListener("click", () => vscode.postMessage({ type: "talk" }));
+speakButton.addEventListener("click", () => vscode.postMessage({ type: "toggleSpeak" }));
 restartButton.addEventListener("click", () => {
   endAgentMessage();
   append(div("notice", "Restarting session…"));

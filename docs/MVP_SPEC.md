@@ -57,6 +57,8 @@ Three parts, deliberately separated so the VS Code part stays thin (a later Zed 
 
 **Decided — where the core lives.** The core runs *inside* the extension host process (fewest moving parts), written as a module with no VS Code imports so it can be split into a daemon later.
 
+**Decided — voice process transport (as built in M2/M3).** The extension launches the voice process as a child and speaks JSON lines over its stdin/stdout (`voice/Sources/VoiceHarnessVoice/Protocol.swift`, `core/src/voiceClient.ts`), instead of the separate local socket in the diagram: same separation, fewer moving parts.
+
 **Decided — voice on the Neural Engine.** STT, TTS and VAD run on the Apple Neural Engine, never the GPU, so the voice loop does not contend with LLM training and stays outside gpu-broker's scope. Gated by the M0b check (§6); fallback if M0b fails: a Python voice process running faster-whisper and Kokoro on CPU.
 
 ### 4.1 Agent connection (ACP)
@@ -88,8 +90,9 @@ Passed to the agent at session start. All are **display-only** — they change w
 
 - **Start cue:** listening starts with an audible tone and a visible "listening" indicator in the panel (M0b showed that without a cue, speech is lost before the user knows recording began).
 - **Your turn:** a VS Code keybinding toggles listening on/off (tap to start, tap to stop). VS Code keybindings fire on key *press* only, so true hold-to-talk isn't available inside VS Code; a global hold-to-talk hotkey in the voice process is a possible later upgrade.
-- **Barge-in while the agent speaks:** Silero VAD with a minimum speech duration (start ~400 ms, tune by test) → pause TTS. If the transcript of the interruption is a backchannel ("mm-hmm", "yeah", "ok", "right"), resume automatically. "Go on" / "continue" resumes; anything else becomes a new turn and the remaining speech is dropped.
-- Echo: the agent's own speech must not trigger barge-in. MVP assumes headphones; speaker + echo cancellation is a later item.
+- **Barge-in while the agent speaks (as built):** Silero VAD (FluidAudio, 256 ms chunks) runs only while speech is playing. On detected speech, playback **pauses at once** (no minimum-duration guard); the interruption, with 0.8 s of pre-roll, is transcribed until 0.7 s of silence (cap 20 s). `core/src/turnPolicy.ts` then decides: empty, backchannel ("mm-hmm", "yeah", "okay") or continuation ("go on") → resume; anything else → stop speech, cancel the agent's turn, and send the interruption as the new turn.
+- Talk key: `Ctrl+Shift+Space` (command `voiceHarness.toggleListening`) or the 🎙 Talk button. Speaking while the agent is mid-turn replaces that turn; speech from the replaced turn is suppressed.
+- Echo: the agent's own speech must not trigger barge-in. Default assumes headphones; the setting `voiceHarness.echoCancellation` enables macOS voice processing (echo cancellation) for use with speakers.
 
 ### 4.5 Permissions
 

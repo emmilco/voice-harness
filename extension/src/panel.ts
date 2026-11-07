@@ -2,19 +2,44 @@ import { randomBytes } from "node:crypto";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import * as vscode from "vscode";
-import { AgentSession, BillingGuardError, SPEECH_LAYER, type PermissionRequest } from "@voice-harness/core";
+import {
+  AgentSession,
+  BillingGuardError,
+  SPEECH_LAYER,
+  SpeechChunker,
+  VoiceClient,
+  classifyInterruption,
+  type PermissionRequest,
+  type VoiceEvent,
+} from "@voice-harness/core";
 import { EditorControl } from "./editorControl";
-import type { FromWebview, ToWebview } from "./protocol";
+import type { FromWebview, ToWebview, VoiceUiState } from "./protocol";
 import { resolveTool } from "./toolchain";
 
-/** The chat panel: owns one agent session and the editor effects it causes. */
+/**
+ * The chat panel: owns one agent session, the voice process, and the editor
+ * effects the agent causes.
+ *
+ * Speech: agent prose is chunked into sentences and spoken as it streams; a
+ * user turn (typed or spoken) stops speech and, if the agent is mid-turn,
+ * cancels that turn first. Speech from a cancelled turn is suppressed.
+ */
 export class HarnessPanel implements vscode.Disposable {
   private static current: HarnessPanel | undefined;
 
   private session: AgentSession | undefined;
+  private voice: VoiceClient | undefined;
+  private voiceState: VoiceUiState = "loading";
+  private voiceDetail: string | undefined;
+  private microphone = false;
+  private inputDevice: string | undefined;
+  private speakReplies: boolean;
+  private readonly chunker = new SpeechChunker();
+  /** True from a cancel (or the start of listening) until the next turn starts. */
+  private suppressSpeech = false;
+  private turn: Promise<void> | null = null;
   private readonly pendingPermissions = new Map<string, (optionId: string | null) => void>();
   private readonly editor: EditorControl;
-  private readonly output: vscode.OutputChannel;
   private disposed = false;
 
   static show(context: vscode.ExtensionContext, output: vscode.OutputChannel): void {
@@ -39,7 +64,11 @@ export class HarnessPanel implements vscode.Disposable {
     void HarnessPanel.current?.startSession();
   }
 
-  /** Ends the agent process when the extension deactivates. */
+  static toggleListening(): void {
+    HarnessPanel.current?.talk();
+  }
+
+  /** Ends the agent and voice processes when the extension deactivates. */
   static disposeCurrent(): void {
     HarnessPanel.current?.panel.dispose();
   }
@@ -48,10 +77,10 @@ export class HarnessPanel implements vscode.Disposable {
     private readonly panel: vscode.WebviewPanel,
     private readonly context: vscode.ExtensionContext,
     private readonly workspace: string,
-    output: vscode.OutputChannel,
+    private readonly output: vscode.OutputChannel,
   ) {
-    this.output = output;
     this.editor = new EditorControl(workspace);
+    this.speakReplies = vscode.workspace.getConfiguration("voiceHarness").get<boolean>("speakReplies", true);
     panel.webview.html = this.html();
     panel.webview.onDidReceiveMessage((m: FromWebview) => this.onMessage(m));
     panel.onDidDispose(() => this.dispose());
@@ -64,16 +93,25 @@ export class HarnessPanel implements vscode.Disposable {
   private async onMessage(m: FromWebview): Promise<void> {
     switch (m.type) {
       case "ready":
+        this.startVoice();
         await this.startSession();
         break;
       case "send":
-        await this.send(m.text);
+        await this.send(m.text, false);
         break;
       case "stop":
-        this.session?.cancel();
+        this.stopEverything();
         break;
       case "restart":
         await this.startSession();
+        break;
+      case "talk":
+        this.talk();
+        break;
+      case "toggleSpeak":
+        this.speakReplies = !this.speakReplies;
+        if (!this.speakReplies) this.silence();
+        this.postVoice();
         break;
       case "permission":
         this.pendingPermissions.get(m.requestId)?.(m.optionId);
@@ -81,17 +119,20 @@ export class HarnessPanel implements vscode.Disposable {
     }
   }
 
+  // MARK: Agent session
+
   private async startSession(): Promise<void> {
     this.session?.dispose();
     this.session = undefined;
+    this.turn = null;
+    this.silence();
     this.resolveAllPermissions();
     this.post({ type: "state", state: "starting", detail: "Starting Claude…" });
 
     const config = vscode.workspace.getConfiguration("voiceHarness");
     const nodePath = resolveTool("node", config.get<string>("nodePath"));
     const claudePath = resolveTool("claude", config.get<string>("claudePath"));
-    const repoRoot = path.resolve(this.context.extensionPath, "..");
-    const agentEntry = path.join(repoRoot, "node_modules", "@agentclientprotocol", "claude-agent-acp", "dist", "index.js");
+    const agentEntry = path.join(this.repoRoot, "node_modules", "@agentclientprotocol", "claude-agent-acp", "dist", "index.js");
     const mcpServerScript = path.join(this.context.extensionPath, "dist", "mcpServer.mjs");
 
     const missing = [
@@ -114,9 +155,13 @@ export class HarnessPanel implements vscode.Disposable {
         mcpServerScript,
         systemPromptAppend: SPEECH_LAYER,
         handlers: {
-          onText: (chunk) => this.post({ type: "agentText", chunk }),
+          onText: (chunk) => {
+            this.post({ type: "agentText", chunk });
+            this.speak(this.chunker.push(chunk));
+          },
           onToolCall: (t, isUpdate) => {
             this.post({ type: "tool", id: t.id, title: t.title, kind: t.kind, status: t.status, isUpdate });
+            if (!isUpdate) this.speak(this.chunker.flush());
             if (t.locations.length && (t.kind === "read" || t.kind === "edit")) void this.editor.follow(t.locations);
           },
           onPermission: (req, signal) => this.askPermission(req, signal),
@@ -139,19 +184,189 @@ export class HarnessPanel implements vscode.Disposable {
     }
   }
 
-  private async send(text: string): Promise<void> {
+  /** Starts a user turn, cancelling (and silencing) any turn still running. */
+  private async send(text: string, spoken: boolean): Promise<void> {
     if (!this.session) return;
-    this.post({ type: "user", text });
+    this.silence();
+    if (this.turn) {
+      this.session.cancel();
+      await this.turn;
+    }
+    const session = this.session;
+    if (!session) return;
+    this.suppressSpeech = false;
+    this.post({ type: "partial", text: "", source: null });
+    this.post({ type: "user", text, spoken });
     this.post({ type: "state", state: "busy" });
-    try {
-      const stopReason = await this.session.prompt(text);
-      this.post({ type: "turnEnd", stopReason });
-      this.post({ type: "state", state: "ready", detail: this.session?.loginSummary });
-    } catch (err) {
-      this.post({ type: "error", text: (err as Error).message });
-      this.post({ type: "state", state: this.session ? "ready" : "stopped" });
+    // `turn` is read in `finally`, which always runs after this assignment completes.
+    let turn!: Promise<void>;
+    turn = (async () => {
+      try {
+        const stopReason = await session.prompt(text);
+        this.speak(this.chunker.flush());
+        this.post({ type: "turnEnd", stopReason });
+      } catch (err) {
+        this.post({ type: "error", text: (err as Error).message });
+      } finally {
+        if (this.turn === turn) this.turn = null;
+        this.post({ type: "state", state: this.session ? "ready" : "stopped", detail: this.session?.loginSummary });
+      }
+    })();
+    this.turn = turn;
+    await turn;
+  }
+
+  private stopEverything(): void {
+    this.silence();
+    if (this.voiceState === "listening") this.voice?.listenCancel();
+    this.session?.cancel();
+  }
+
+  // MARK: Voice
+
+  private startVoice(): void {
+    const config = vscode.workspace.getConfiguration("voiceHarness");
+    const binary = path.join(this.repoRoot, "voice", ".build", "release", "VoiceHarnessVoice");
+    if (!existsSync(binary)) {
+      this.setVoice("unavailable", `voice process not built (run npm run build): ${binary}`);
+      return;
+    }
+    this.setVoice("loading", "Loading voice…");
+    this.voice = VoiceClient.start({
+      binary,
+      modelsDirectory: config.get<string>("modelsDirectory") || "/Users/Shared/ai/models/fluidaudio",
+      voice: config.get<string>("voice") || "af_heart",
+      voiceProcessing: config.get<boolean>("echoCancellation", false),
+      onEvent: (e) => this.onVoiceEvent(e),
+      onExit: (reason) => {
+        this.voice = undefined;
+        this.output.appendLine(reason);
+        this.setVoice("unavailable", reason);
+      },
+    });
+  }
+
+  private onVoiceEvent(e: VoiceEvent): void {
+    switch (e.event) {
+      case "loading":
+        this.setVoice("loading", "Loading voice…");
+        break;
+      case "ready":
+        this.microphone = e.microphone;
+        this.output.appendLine(`voice ready: ${JSON.stringify(e)}`);
+        this.inputDevice = e.inputDevice;
+        this.setVoice("idle", e.microphone ? `mic: ${e.inputDevice}` : "microphone unavailable — speech output only");
+        break;
+      case "deviceChanged":
+        this.inputDevice = e.input;
+        this.output.appendLine(`audio devices changed: input ${e.input}, output ${e.output}`);
+        this.post({ type: "notice", text: `Audio switched to ${e.output} (mic: ${e.input}).` });
+        this.setVoice(this.voiceState === "listening" ? "listening" : "idle", `mic: ${e.input}`);
+        break;
+      case "level":
+        this.post({ type: "level", db: e.db });
+        break;
+      case "micStats":
+        this.output.appendLine(`[voice] mic during turn: ${JSON.stringify(e)}`);
+        break;
+      case "synthesized":
+        this.output.appendLine(`[voice] synthesized #${e.id}: ${e.ms} ms for ${e.audioMs} ms of audio`);
+        break;
+      case "micUnavailable":
+        this.output.appendLine(`microphone unavailable: ${e.reason}`);
+        break;
+      case "speechActive":
+        if (this.voiceState !== "listening") this.setVoice("speaking");
+        break;
+      case "speechIdle":
+        if (this.voiceState === "speaking") this.setVoice("idle");
+        break;
+      case "listening":
+        this.setVoice("listening", this.inputDevice ? `mic: ${this.inputDevice}` : undefined);
+        break;
+      case "partial":
+        this.post({ type: "partial", text: e.text, source: e.source });
+        break;
+      case "transcript":
+        this.setVoice("idle", this.inputDevice ? `mic: ${this.inputDevice}` : undefined);
+        this.post({ type: "partial", text: "", source: null });
+        if (e.text) void this.send(e.text, true);
+        else this.post({ type: "notice", text: "Didn't catch anything." });
+        break;
+      case "listenCancelled":
+        this.setVoice("idle");
+        this.post({ type: "partial", text: "", source: null });
+        break;
+      case "bargeIn":
+        this.setVoice("interrupted");
+        break;
+      case "interruption": {
+        const action = classifyInterruption(e.text);
+        this.output.appendLine(`interruption "${e.text}" → ${action}`);
+        this.post({ type: "partial", text: "", source: null });
+        if (action === "resume") {
+          this.voice?.resumeSpeaking();
+          this.setVoice("speaking");
+        } else {
+          this.setVoice("idle");
+          void this.send(e.text, true);
+        }
+        break;
+      }
+      case "spoke":
+        break;
+      case "error":
+        this.output.appendLine(`voice error: ${e.message}`);
+        this.post({ type: "notice", text: `Voice: ${e.message}` });
+        break;
+      case "fatal":
+        this.output.appendLine(`voice fatal: ${e.message}`);
+        this.setVoice("unavailable", e.message);
+        break;
+      case "log":
+        this.output.appendLine(`[voice] ${e.message}`);
+        break;
     }
   }
+
+  /** Talk key: start a spoken turn, or end the one in progress. */
+  private talk(): void {
+    if (!this.voice || !this.microphone || this.voiceState === "loading" || this.voiceState === "unavailable") {
+      this.post({ type: "notice", text: "Voice input isn't available yet." });
+      return;
+    }
+    if (this.voiceState === "listening") {
+      this.voice.listenStop();
+      return;
+    }
+    // Whatever the agent says next belongs to the turn being replaced.
+    this.silence();
+    this.voice.listenStart();
+  }
+
+  private speak(sentences: string[]): void {
+    if (!this.voice || !this.speakReplies || this.suppressSpeech) return;
+    for (const s of sentences) this.voice.speak(s);
+  }
+
+  /** Stops speech now and drops speech for the rest of the current turn. */
+  private silence(): void {
+    this.suppressSpeech = true;
+    this.chunker.reset();
+    this.voice?.stopSpeaking();
+  }
+
+  private setVoice(state: VoiceUiState, detail?: string): void {
+    this.voiceState = state;
+    this.voiceDetail = detail;
+    this.postVoice();
+  }
+
+  private postVoice(): void {
+    this.post({ type: "voice", state: this.voiceState, speak: this.speakReplies, microphone: this.microphone, detail: this.voiceDetail });
+  }
+
+  // MARK: Permissions
 
   private askPermission(req: PermissionRequest, signal: AbortSignal): Promise<string | null> {
     const requestId = randomBytes(8).toString("hex");
@@ -171,6 +386,12 @@ export class HarnessPanel implements vscode.Disposable {
     for (const finish of [...this.pendingPermissions.values()]) finish(null);
   }
 
+  // MARK: Webview
+
+  private get repoRoot(): string {
+    return path.resolve(this.context.extensionPath, "..");
+  }
+
   private html(): string {
     const webview = this.panel.webview;
     const nonce = randomBytes(16).toString("base64");
@@ -185,13 +406,20 @@ export class HarnessPanel implements vscode.Disposable {
 <title>Voice Harness</title>
 </head>
 <body>
-<header id="status" class="status starting">Starting…</header>
+<header>
+  <div id="status" class="status starting">Starting…</div>
+  <div id="voice" class="voice loading">Voice loading…</div>
+</header>
 <main id="log"></main>
+<div id="partial" class="partial" hidden></div>
 <footer>
-  <textarea id="input" rows="3" placeholder="Ask about the code… (Enter to send, Shift+Enter for a new line)"></textarea>
+  <textarea id="input" rows="3" placeholder="Ask about the code… (Enter to send, Shift+Enter for a new line, Ctrl+Shift+Space to talk)"></textarea>
   <div class="buttons">
+    <button id="talk" title="Ctrl+Shift+Space">🎙 Talk</button>
     <button id="send">Send</button>
     <button id="stop" class="secondary">Stop</button>
+    <span class="spacer"></span>
+    <button id="speak" class="secondary" title="Speak Claude's replies">🔊 Voice on</button>
     <button id="restart" class="secondary">Restart</button>
   </div>
 </footer>
@@ -206,6 +434,7 @@ export class HarnessPanel implements vscode.Disposable {
     HarnessPanel.current = undefined;
     this.resolveAllPermissions();
     this.session?.dispose();
+    this.voice?.dispose();
     this.editor.dispose();
   }
 }

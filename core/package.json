@@ -5,7 +5,8 @@
   "description": "Editor-independent harness core: ACP agent session, billing guard, display-tool MCP server and relay.",
   "main": "src/index.ts",
   "scripts": {
-    "smoke": "esbuild scripts/smoke.ts --bundle --platform=node --format=esm --outfile=scripts/.smoke.mjs --log-level=warning && node scripts/.smoke.mjs"
+    "smoke": "esbuild scripts/smoke.ts --bundle --platform=node --format=esm --outfile=scripts/.smoke.mjs --log-level=warning && node scripts/.smoke.mjs",
+    "unit": "esbuild scripts/unit.ts --bundle --platform=node --format=esm --outfile=scripts/.unit.mjs --log-level=warning && node scripts/.unit.mjs"
   },
   "dependencies": {
     "@agentclientprotocol/claude-agent-acp": "0.101.0",

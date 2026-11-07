@@ -10,3 +10,63 @@ Hypothesis: Attempt 1's empty transcript came from the recording, not the transc
 Tried: (a) per-0.5 s RMS envelope of attempt 1's recording; (b) re-transcribing it converted to 16-bit 16 kHz WAV; (c) Elliot re-ran `VoiceCheck listen 10` unchanged.
 Outcome: (a) flat -43 to -47 dBFS for all 10.6 s, no speech bursts; (b) still empty; (c) correct transcript of Elliot's live speech ("Let's try this again. I'm talking, I'm talking, I'm making conversation because I just want to make sure that I'm.") — 10.2 s in 194 ms, cut off only by the 10 s limit.
 Learning: H2 ruled out (same .caf path works; WAV conversion did not help). Attempt 1 captured no speech; why is unknown (candidates: Elliot not speaking yet, macOS mic-permission grant during the first run). Live-mic transcription works (n=1 success).
+
+## Attempt 3 — 2026-11-07 00:52:00
+Hypothesis: Speech starts within ~0.3 s of the first sentence being queued (M0b warm synthesis 38-108 ms).
+Tried: `node core/scripts/.smoke.mjs --speak` — real Claude turn → SpeechChunker → VoiceHarnessVoice.
+Outcome: six sentences queued at 23.2 s; first finished playing at 30.4 s; inferred playback start ≈ 26.9 s, i.e. ~3.7 s after queuing. Later sentences played back to back.
+Learning: pending. Candidate H-G2P: first synthesis containing out-of-lexicon words ("tiny_gpt.py", "fn") loads the BART G2P fallback model cold; warm-up sentences were all in-lexicon. Falsified if an all-lexicon sentence is equally slow.
+
+## Attempt 4 — 2026-11-07 00:58:00
+Hypothesis: H-G2P (out-of-lexicon words make the first synthesis slow).
+Tried: new `synthesized` event (synthesis ms, audio ms); voice process fed the out-of-lexicon sentence twice, then an all-lexicon sentence.
+Outcome: 640 ms (OOV, first), 447 ms (same, second), 411 ms (all-lexicon); that sentence is 6025 ms of audio.
+Learning: H-G2P mostly falsified (≤ ~200 ms first-use cost). Attempt 3's "3.7 s" was an analysis error: I assumed sentence #1 was ~3.5 s of audio; it is 6.0 s, so playback actually began ≈ 24.4 s, ~1.2 s after queuing (~0.64 s synthesis + scheduling). Real first-sentence latency ≈ 1.2 s on a long first sentence; acceptable for the MVP, improvable by speaking a shorter first chunk.
+
+## Attempt 5 — 2026-11-07 01:10:00
+Hypothesis: After making buffer forwarding order-safe, listenStart → listenStop still yields an (empty) transcript.
+Tried: voice process with listenStart at 6 s, listenStop at 9 s, shutdown at 12 s (startup took 18 s, so all three ran back to back after ready).
+Outcome: `listening` emitted; no `transcript`; shutdown ignored; process hung (killed).
+Learning: candidate H-race: finish() ran before the detached start() had started the analyzer; finish() cancelled it, start() then started a cancelled analyzer, the results stream never ended, and the Controller actor blocked forever awaiting it. Not the lock change (the passing Attempt-2-era test had seconds between start and stop). Falsified if the hang persists once finish() awaits start().
+
+## Attempt 6 — 2026-11-07 01:18:00
+Hypothesis: H-race (Attempt 5): making finish() await start() fixes the hang.
+Tried: finish()/cancel() await the start task; 5 s timeout on results. Tested rapid (start+stop back to back) and spaced (3 s) listen cycles under a 60 s alarm.
+Outcome: both hung (killed by alarm, exit 142) after `listening`.
+Learning: H-race insufficient — spaced also hangs once finish() waits on start(). New candidate H-start-blocks: `SpeechAnalyzer.start(inputSequence:)` does not return until the input sequence ends. Implies the original code never set `started` during a turn, so no live audio ever reached the analyzer (Attempt-2-era silent test passed vacuously), and awaiting start() before ending input deadlocks. Falsified if the inputSequence initializer (no start() call) still hangs or still yields nothing for speech.
+
+## Attempt 7 — 2026-11-07 01:26:00
+Hypothesis: H-start-blocks (Attempt 6): constructing the analyzer with inputSequence (no start() call) delivers live audio and removes the hang.
+Tried: rebuilt; rapid listen cycle, "spaced" cycle (its commands also queued before ready, so effectively rapid), and a positive control (listenStart after ready, `say` clip played through speakers, listenStop ~6 s later).
+Outcome: positive control returned a transcript of live room speech (unrelated room speech, not recorded) — not the clip (likely headphones). Rapid and spaced still hung (alarm, exit 142).
+Learning: H-start-blocks supported: live audio now reaches the analyzer (first live-path transcript). Remaining hang only when listenStop follows listenStart with ~no audio fed. Candidate H-empty-finalize: finalizeAndFinishThroughEndOfInput() never returns when the analyzer received no input. Falsified if skipping finalize in that case still hangs.
+
+## Attempt 8 — 2026-11-07 01:31:00
+Hypothesis: H-empty-finalize — skip finalize (cancel instead) when no audio reached the analyzer; bound finalize with a 5 s timeout.
+Tried: rebuilt; rapid listen cycle; then after ready: 3 s listen, an immediate start/stop, shutdown.
+Outcome: all cycles emitted `transcript` (empty — quiet room) and the process exited 0; no hang.
+Learning: H-empty-finalize supported. Live transcription path now: analyzer constructed with its input stream; finish skips finalize without audio; finalize and results each time-bounded. Closed.
+
+## Attempt 9 — 2026-11-07 09:40:00
+Hypothesis: H-device-switch — AirPods connected after "Voice ready" changed the default input/output; AVAudioEngine stops on a configuration change and nothing restarts it, so mic input (and speech) go dead.
+Tried: (observation only) Elliot connected AirPods after the panel was ready; pressing Ctrl+Shift+Space produced nothing. system_profiler: AirPods are default input and output at 24 kHz (Bluetooth headset mode).
+Outcome: input dead with AirPods.
+Learning: consistent with H-device-switch (AirPods arrived after start). Fix: observe AVAudioEngineConfigurationChange, rebuild tap/converter, restart engine and players, reset speaker state; add a mic level meter so input presence is visible. Falsified if input stays dead after recovery, or with AirPods connected before the panel opens (would implicate the 24 kHz headset format instead).
+
+## Attempt 10 — 2026-11-07 09:58:00
+Hypothesis: with device-change recovery and level events, mic input works with AirPods (and levels show it).
+Tried: voice process started with AirPods already default input+output; listenStart, 2 s, listenStop.
+Outcome: ready reports AirPods as input/output (startup 28 s); `listening`, then empty transcript; NO `level` events at all.
+Learning: H-device-switch is not the whole story — with AirPods present before start, no mic audio reaches the controller (the stated falsifier). Not yet ruled out: level reporting itself broken (no MacBook-mic control run). Next: instrument the tap (callback count, buffer format, format-guard drops, conversion errors) to locate where audio stops.
+
+## Attempt 11 — 2026-11-07 10:05:00
+Hypothesis: instrumentation will show where AirPods audio stops.
+Tried: tap counters (callbacks, delivered, format mismatches, conversion errors, buffer format); AirPods default at start; listenStart ~6.5 s after ready; 2 s listen.
+Outcome: 17 callbacks, 17 delivered, 0 mismatches, 0 conversion errors; format 24 kHz mono Float32 (AirPods headset mode); levels ≈ -60 dBFS (quiet room).
+Learning: AirPods input works once the engine has run a few seconds. Attempt 10's silence most plausibly timing: listen ran immediately after ready (startup 28 s, commands queued) while Bluetooth was switching to headset mode — itself an engine configuration change, which before the recovery fix would have stopped the engine for good. Supports H-device-switch for Elliot's VS Code case; confirmation pending his retest with the recovery build. Instrumentation kept (micStats per turn).
+
+## Attempt 12 — 2026-11-07 10:20:00
+Hypothesis: with device-change recovery, AirPods input works in VS Code both when connected before the panel opens and when swapped mid-session.
+Tried: Elliot retested in the Extension Development Host: (1) AirPods in before opening the panel, talk after ready; (2) AirPods removed and reinserted during the session, then talk.
+Outcome: both worked (Elliot's report).
+Learning: H-device-switch confirmed for the reported failure: AVAudioEngine stops on device/route changes (including AirPods entering headset mode) and must be restarted with a rebuilt tap. Closed.

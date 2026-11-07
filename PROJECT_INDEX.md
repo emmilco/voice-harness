@@ -17,8 +17,13 @@ voice-harness/
 │   │   ├── relay.ts         # Unix-socket relay from the MCP server to the front end
 │   │   ├── mcpServer.ts     # stdio MCP server: show_code, clear_highlight (bundled to extension/dist)
 │   │   ├── speechLayer.ts   # system-prompt text appended to Claude Code's standard prompt
+│   │   ├── speechText.ts    # SpeechChunker: streamed markdown → speakable sentences (skips fences, tables)
+│   │   ├── turnPolicy.ts    # classifyInterruption: resume vs new turn
+│   │   ├── voiceClient.ts   # spawns the voice process; JSON-lines protocol
 │   │   └── index.ts         # public exports
-│   └── scripts/smoke.ts     # headless one-turn test (`npm run smoke`, after `npm run build`)
+│   └── scripts/
+│       ├── smoke.ts         # headless one-turn agent test (`npm run smoke`; `--speak` also speaks the reply)
+│       └── unit.ts          # unit tests for chunker and policy (`npm run unit`)
 ├── extension/         # VS Code extension (thin presentation layer)
 │   ├── package.json   # extension manifest: commands, settings
 │   ├── esbuild.mjs    # bundles extension.js, mcpServer.mjs, webview.js into dist/ (gitignored)
@@ -29,6 +34,14 @@ voice-harness/
 │   │   ├── protocol.ts      # extension ↔ webview message types
 │   │   └── toolchain.ts     # resolves node / claude via settings or a login shell
 │   └── webview/       # main.ts (chat UI, markdown-it, `onscreen` blocks), style.css
+├── voice/             # Swift voice process (SwiftPM; FluidAudio pinned exactly)
+│   └── Sources/VoiceHarnessVoice/
+│       ├── main.swift          # startup: mic permission, Kokoro warm-up, VAD, speech assets, command loop
+│       ├── Protocol.swift      # stdin commands / stdout events (JSON lines)
+│       ├── AudioIO.swift       # one AVAudioEngine: speech + tone players, 16 kHz mic tap
+│       ├── Speaker.swift       # sentence queue → Kokoro → playback; pause/resume/stop
+│       ├── LiveTranscription.swift # one live SpeechAnalyzer utterance
+│       └── Controller.swift    # listen / speak / interrupt state machine
 ├── docs/              # specs and design documents
 │   └── MVP_SPEC.md    # MVP scope, architecture, build order, open questions
 └── spike/             # throwaway milestone spikes (not product code)
@@ -36,9 +49,7 @@ voice-harness/
     └── m0b/           # Swift voice check: Kokoro TTS (FluidAudio) + Apple SpeechAnalyzer STT; RESULTS.md
 ```
 
-Planned (per `docs/MVP_SPEC.md` §4): `voice/` (Swift voice process, Swift Package Manager), from M2.
-
-Setup: `npm install --ignore-scripts && npm run build`. Run: open this folder in VS Code and press F5.
+Setup: `npm install --ignore-scripts && npm run build` (builds the TypeScript bundles and the Swift voice process). Run: open this folder in VS Code and press F5.
 
 Run the M0 spike: `cd spike/m0 && npm ci --ignore-scripts && node client.mjs ["optional prompt"]`.
 
