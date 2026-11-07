@@ -86,6 +86,7 @@ Passed to the agent at session start. All are **display-only** — they change w
 
 ### 4.4 Turn-taking
 
+- **Start cue:** listening starts with an audible tone and a visible "listening" indicator in the panel (M0b showed that without a cue, speech is lost before the user knows recording began).
 - **Your turn:** a VS Code keybinding toggles listening on/off (tap to start, tap to stop). VS Code keybindings fire on key *press* only, so true hold-to-talk isn't available inside VS Code; a global hold-to-talk hotkey in the voice process is a possible later upgrade.
 - **Barge-in while the agent speaks:** Silero VAD with a minimum speech duration (start ~400 ms, tune by test) → pause TTS. If the transcript of the interruption is a backchannel ("mm-hmm", "yeah", "ok", "right"), resume automatically. "Go on" / "continue" resumes; anything else becomes a new turn and the remaining speech is dropped.
 - Echo: the agent's own speech must not trigger barge-in. MVP assumes headphones; speaker + echo cancellation is a later item.
@@ -116,5 +117,5 @@ Each step ends with a short demo to Elliot before the next starts.
 ## 7. Open questions
 
 1. Anthropic terms on subscription use through a self-built client for personal use — not yet checked.
-2. FluidAudio's license and macOS 27 compatibility (its release notes flag Kokoro crashes on some macOS 26 builds) — checked in M0b.
-3. TTS voice choice among Kokoro's voices.
+
+Resolved by M0b (passed 2026-11-06; see `spike/m0b/RESULTS.md`): FluidAudio is Apache-2.0 and runs Kokoro without crashes on macOS 27.2; voice is `af_heart`; weights live in the MLP store `fluidaudio`.

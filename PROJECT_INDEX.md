@@ -7,6 +7,7 @@ VS Code–based voice + code learning environment: talk aloud with a coding agen
 ```
 voice-harness/
 ├── PROJECT_INDEX.md   # this file
+├── experiment_log.md  # append-only log of failed/diagnosed attempts (QMS §7.3)
 ├── docs/              # specs and design documents
 │   └── MVP_SPEC.md    # MVP scope, architecture, build order, open questions
 └── spike/             # throwaway milestone spikes (not product code)
@@ -17,7 +18,7 @@ voice-harness/
     │   └── package.json   # exact-pinned deps (node_modules/ gitignored)
     └── m0b/           # Swift voice check: Kokoro TTS (FluidAudio) + Apple SpeechAnalyzer STT
         ├── Package.swift          # FluidAudio pinned exactly, TTS trait
-        ├── Sources/VoiceCheck/    # main.swift — `tts` and `stt` subcommands
+        ├── Sources/VoiceCheck/    # main.swift — `tts`, `stt`, `voices`, `listen` subcommands
         └── RESULTS.md             # measured timings and findings
 ```
 

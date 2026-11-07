@@ -29,7 +29,21 @@ OS speech assets were already installed. Whole-file analysis (not live streaming
 | Kokoro long | 13.43 s | 176 ms | exact apart from punctuation |
 | macOS `say` (Samantha) | 4.98 s | 94 ms | exact apart from punctuation |
 
-Not yet tested: a real human voice through the microphone, live streaming input, room noise.
+### Live microphone (`VoiceCheck listen 10`, run by Elliot)
+
+- Run 1: empty transcript. The recording held no speech (flat −43 to −47 dBFS envelope): Elliot didn't know recording had started, because `!` output only appears after the command ends. Not a transcriber or format fault (16-bit WAV conversion also empty; see `experiment_log.md`).
+- Run 2: Elliot's live speech transcribed correctly — 10.2 s in 194 ms ("Let's try this again. I'm talking, I'm talking, I'm making conversation because I just want to make sure that I'm." — cut only by the 10 s limit).
+- Lesson for M3: listening needs an audible start cue and a visible indicator.
+
+Not yet tested: pauses and fillers, room noise, streaming (incremental) transcription.
+
+## Voice choice
+
+Seven alternatives rendered (`VoiceCheck voices …`): af_bella, af_sarah, am_michael, am_eric, bf_emma, bm_george, bm_fable. Elliot chose **`af_heart`**.
+
+## Verdict
+
+**M0b passed** (Elliot, 2026-11-06): no crashes on macOS 27.2, latency acceptable. The Neural Engine route stands; the CPU/Python fallback is not needed.
 
 ## Model weights (MLP)
 

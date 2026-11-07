@@ -4,6 +4,7 @@
 //   VoiceCheck tts            synthesize test sentences, report timings, write WAVs
 //   VoiceCheck stt <wav...>   transcribe WAV files, report timings
 import AVFAudio
+import AVFoundation
 import FluidAudio
 import Foundation
 import Speech
@@ -86,12 +87,52 @@ func runSTT(_ paths: [String]) async throws {
     }
 }
 
+func runVoices(_ voices: [String]) async throws {
+    let passage =
+        "Here's the idea behind attention. Every token asks a question, every other token offers an answer, " +
+        "and the scores decide how much of each answer to mix in. Let's look at where that happens in the code."
+    let manager = KokoroAneManager(directory: modelsRoot, version: .v3)
+    try await manager.initialize()
+    for voice in voices {
+        let t = ContinuousClock.now
+        let wav = try await manager.synthesize(text: passage, voice: voice)
+        try wav.write(to: outDir.appendingPathComponent("voice_\(voice).wav"))
+        print(String(format: "[voices] %-12@ %5.2f s audio in %@", voice, wavSeconds(wav), ms(t)))
+    }
+}
+
+func runListen(seconds: Double) async throws {
+    guard await AVCaptureDevice.requestAccess(for: .audio) else {
+        print("[listen] microphone access denied — allow it for your terminal in System Settings → Privacy & Security → Microphone")
+        return
+    }
+    let url = outDir.appendingPathComponent("mic_recording.caf")
+    let engine = AVAudioEngine()
+    let input = engine.inputNode
+    let format = input.outputFormat(forBus: 0)
+    nonisolated(unsafe) let file = try AVAudioFile(forWriting: url, settings: format.settings)
+    input.installTap(onBus: 0, bufferSize: 4096, format: format) { buffer, _ in
+        try? file.write(from: buffer)
+    }
+    try engine.start()
+    print(String(format: "[listen] recording %.0f s — speak now…", seconds))
+    try await Task.sleep(for: .seconds(seconds))
+    input.removeTap(onBus: 0)
+    engine.stop()
+    print("[listen] done; transcribing")
+    try await runSTT([url.path])
+}
+
 let args = CommandLine.arguments.dropFirst()
 switch args.first {
 case "tts":
     try await runTTS()
 case "stt":
     try await runSTT(Array(args.dropFirst()))
+case "voices":
+    try await runVoices(Array(args.dropFirst()))
+case "listen":
+    try await runListen(seconds: Double(args.dropFirst().first ?? "") ?? 8)
 default:
-    print("usage: VoiceCheck tts | VoiceCheck stt <wav...>")
+    print("usage: VoiceCheck tts | stt <wav...> | voices <voice...> | listen [seconds]")
 }
