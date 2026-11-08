@@ -1,5 +1,7 @@
 import { spawn, type ChildProcess } from "node:child_process";
+import { readFileSync, statSync } from "node:fs";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import { Readable, Writable } from "node:stream";
 import { PROTOCOL_VERSION, client as acpClient, methods, ndJsonStream } from "@agentclientprotocol/sdk/unstable";
 import { checkBilling } from "./billingGuard";
@@ -73,6 +75,11 @@ export interface ExplainStep {
 }
 
 /** Callbacks through which a front end (VS Code, a test script) presents the session. */
+/** Something attached to a user turn besides its text. */
+export type Attachment =
+  | { kind: "file"; path: string }
+  | { kind: "image"; mimeType: string; data: string };
+
 /** A session setting the agent offers (model, mode, effort…), with its current value. */
 export interface ConfigOption {
   id: string;
@@ -390,14 +397,18 @@ export class AgentSession {
     this.setOptions(loaded?.configOptions);
   }
 
-  /** Sends one user turn; resolves with the stop reason when the turn ends. */
-  async prompt(text: string): Promise<string> {
+  /** Sends one user turn (text plus any attached files or images); resolves with the stop reason when the turn ends. */
+  async prompt(text: string, attachments: Attachment[] = []): Promise<string> {
     this.turnAbort = new AbortController();
+    const blocks = [
+      { type: "text" as const, text },
+      ...attachments.map((a) => (a.kind === "file" ? fileBlock(a.path) : { type: "image" as const, mimeType: a.mimeType, data: a.data })),
+    ];
     try {
-      const result = await this.connection.agent.request(methods.agent.session.prompt, {
+      const result = (await this.connection.agent.request(methods.agent.session.prompt, {
         sessionId: this.sessionId,
-        prompt: [{ type: "text", text }],
-      });
+        prompt: blocks,
+      })) as { stopReason: string };
       return result.stopReason;
     } finally {
       this.turnAbort = null;
@@ -416,6 +427,25 @@ export class AgentSession {
     this.turnAbort?.abort();
     this.child.kill("SIGTERM");
     this.relay.close();
+  }
+}
+
+const MAX_EMBEDDED_FILE_BYTES = 256 * 1024;
+
+/**
+ * A mentioned file as a prompt block: small text files are embedded with their contents (as
+ * Claude Code's own @-mentions do); large or binary files are linked, for the agent to read.
+ */
+function fileBlock(file: string) {
+  const uri = pathToFileURL(file).href;
+  const link = { type: "resource_link" as const, uri, name: path.basename(file) };
+  try {
+    if (statSync(file).size > MAX_EMBEDDED_FILE_BYTES) return link;
+    const bytes = readFileSync(file);
+    if (bytes.includes(0)) return link;
+    return { type: "resource" as const, resource: { uri, text: bytes.toString("utf8"), mimeType: "text/plain" } };
+  } catch {
+    return link;
   }
 }
 

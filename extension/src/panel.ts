@@ -16,6 +16,7 @@ import {
   editorContextLabel,
   formatEditorContext,
   parseDataFile,
+  type Attachment,
   type ConfigOption,
   type ExplainStep,
   type Figure,
@@ -67,6 +68,7 @@ export class HarnessPanel implements vscode.Disposable {
   /** True from a cancel (or the start of listening) until the next turn starts. */
   private suppressSpeech = false;
   private turn: Promise<void> | null = null;
+  private fileList: { files: string[]; at: number } | undefined;
   /** Typed messages waiting for the running turn to finish, oldest first. */
   private readonly queue: { id: string; text: string }[] = [];
   private readonly pendingPermissions = new Map<string, (optionId: string | null) => void>();
@@ -148,6 +150,9 @@ export class HarnessPanel implements vscode.Disposable {
       case "send":
         if (this.turn) this.enqueue(m.text);
         else await this.send(m.text, false);
+        break;
+      case "listFiles":
+        this.post({ type: "files", files: await this.workspaceFiles() });
         break;
       case "unqueue":
         this.removeQueued(m.id);
@@ -391,14 +396,21 @@ export class HarnessPanel implements vscode.Disposable {
         ? this.tracker.current()
         : undefined;
     const prompt = context ? `${formatEditorContext(context)}\n\n${text}` : text;
+    const attachments = this.mentionedFiles(text);
     this.post({ type: "partial", text: "", source: null });
-    this.post({ type: "user", text, spoken, context: context ? editorContextLabel(context) : undefined });
+    this.post({
+      type: "user",
+      text,
+      spoken,
+      context: context ? editorContextLabel(context) : undefined,
+      attachments: attachments.map((a) => (a.kind === "file" ? path.relative(this.workspace, a.path) : "image")),
+    });
     this.post({ type: "state", state: "busy" });
     // `turn` is read in `finally`, which always runs after this assignment completes.
     let turn!: Promise<void>;
     turn = (async () => {
       try {
-        const stopReason = await session.prompt(prompt);
+        const stopReason = await session.prompt(prompt, attachments);
         this.speak(this.chunker.flush());
         this.post({ type: "turnEnd", stopReason });
         if (stopReason === "end_turn" && !this.suppressSpeech) {
@@ -421,6 +433,30 @@ export class HarnessPanel implements vscode.Disposable {
     })();
     this.turn = turn;
     await turn;
+  }
+
+  /** Workspace files for @-completion, relative to the root (cached for 30 s). */
+  private async workspaceFiles(): Promise<string[]> {
+    if (this.fileList && Date.now() - this.fileList.at < 30_000) return this.fileList.files;
+    const uris = await vscode.workspace.findFiles(
+      new vscode.RelativePattern(this.workspace, "**/*"),
+      "{**/node_modules/**,**/.git/**,**/.build/**,**/dist/**,**/build/**}",
+      5000,
+    );
+    const files = uris.map((u) => path.relative(this.workspace, u.fsPath)).sort();
+    this.fileList = { files, at: Date.now() };
+    return files;
+  }
+
+  /** Files named with @path in a message that exist inside the workspace. */
+  private mentionedFiles(text: string): Attachment[] {
+    const out: Attachment[] = [];
+    for (const m of text.matchAll(/(?:^|\s)@([^\s]+)/g)) {
+      const file = path.resolve(this.workspace, m[1].replace(/[.,;:!?)]+$/, ""));
+      if (!file.startsWith(this.workspace + path.sep) || !existsSync(file) || !statSync(file).isFile()) continue;
+      if (!out.some((a) => a.kind === "file" && a.path === file)) out.push({ kind: "file", path: file });
+    }
+    return out;
   }
 
   private enqueue(text: string): void {

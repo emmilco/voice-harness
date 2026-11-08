@@ -80,6 +80,28 @@ completer.addSource((text, caret) => {
     .map((c) => ({ label: `/${c.name}`, detail: c.hint ? `${c.hint} — ${c.description}` : c.description, insert: `/${c.name} ` }));
   return { start: 0, items };
 });
+let files: string[] = [];
+let filesRequestedAt = 0;
+completer.addSource((text, caret) => {
+  const m = /(?:^|\s)@([^\s@]*)$/.exec(text.slice(0, caret));
+  if (!m) return undefined;
+  if (Date.now() - filesRequestedAt > 30_000) {
+    filesRequestedAt = Date.now();
+    vscode.postMessage({ type: "listFiles" });
+  }
+  const typed = m[1].toLowerCase();
+  const scored = files
+    .map((f) => {
+      const lower = f.toLowerCase();
+      const base = lower.slice(lower.lastIndexOf("/") + 1);
+      const score = base.startsWith(typed) ? 0 : base.includes(typed) ? 1 : lower.includes(typed) ? 2 : -1;
+      return { f, score };
+    })
+    .filter((x) => x.score >= 0)
+    .sort((a, b) => a.score - b.score || a.f.length - b.f.length);
+  const items = scored.slice(0, 50).map(({ f }) => ({ label: f.slice(f.lastIndexOf("/") + 1), detail: f, insert: `@${f} ` }));
+  return { start: caret - m[1].length - 1, items };
+});
 let voiceUsable = false;
 let voiceText = "";
 const meter = document.createElement("span");
@@ -183,8 +205,13 @@ window.addEventListener("message", (event: MessageEvent<ToWebview>) => {
       const bubble = div("message user", m.text);
       if (m.spoken) bubble.classList.add("spoken");
       if (m.context) {
-        const chip = div("context-chip", `📎 ${m.context}`);
+        const chip = div("context-chip", `📍 ${m.context}`);
         chip.title = "Your editor position was sent with this message";
+        bubble.appendChild(chip);
+      }
+      for (const name of m.attachments ?? []) {
+        const chip = div("context-chip", `📎 ${name}`);
+        chip.title = "Attached to this message";
         bubble.appendChild(chip);
       }
       append(bubble);
@@ -283,6 +310,10 @@ window.addEventListener("message", (event: MessageEvent<ToWebview>) => {
       break;
     case "commands":
       commands = m.commands;
+      break;
+    case "files":
+      files = m.files;
+      completer.refresh();
       break;
     case "title": {
       const title = document.getElementById("title")!;

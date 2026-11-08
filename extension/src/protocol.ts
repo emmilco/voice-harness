@@ -14,7 +14,8 @@ export type ToWebview =
   | { type: "voice"; state: VoiceUiState; speak: boolean; microphone: boolean; conversation: boolean; autoListening: boolean; detail?: string }
   | { type: "partial"; text: string; source: "user" | "interruption" | null }
   | { type: "level"; db: number }
-  | { type: "user"; text: string; spoken: boolean; context?: string }
+  | { type: "user"; text: string; spoken: boolean; context?: string; attachments?: string[] }
+  | { type: "files"; files: string[] }
   | { type: "agentText"; chunk: string }
   | { type: "turnEnd"; stopReason: string }
   | {
@@ -67,5 +68,6 @@ export type FromWebview =
   | { type: "loadSession"; id: string }
   | { type: "newSession" }
   | { type: "setOption"; id: string; value: string }
+  | { type: "listFiles" }
   | { type: "unqueue"; id: string }
   | { type: "sendNow"; id: string };

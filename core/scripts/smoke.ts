@@ -155,7 +155,9 @@ const session = await AgentSession.start({
 await session.setConfigOption("mode", "default");
 log("session", `${session.sessionId} (${session.loginSummary}); options: ${session.configOptions.map((o) => `${o.id}=${o.current}`).join(", ")}`);
 
-const stop = await session.prompt(PROMPT);
+// VH_ATTACH: comma-separated workspace files to attach as resource links.
+const attachments = (process.env.VH_ATTACH ?? "").split(",").filter(Boolean).map((f) => ({ kind: "file" as const, path: path.resolve(WORKSPACE, f) }));
+const stop = await session.prompt(PROMPT, attachments);
 if (voice) {
   say(chunker.flush());
   await new Promise<void>((r) => {
