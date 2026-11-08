@@ -1,6 +1,6 @@
 // Unit tests for the pure speech logic: `npm run unit -w core`.
 import assert from "node:assert/strict";
-import { SpeechChunker, StepSequencer, classifyInterruption } from "../src/index";
+import { SpeechChunker, StepSequencer, classifyInterruption, editorContextLabel, formatEditorContext } from "../src/index";
 
 function speakAll(chunks: string[]): string[] {
   const c = new SpeechChunker();
@@ -84,6 +84,19 @@ const cases: [string, () => void][] = [
     seq.push("A", 1);
     seq.push("B", 2);
     assert.deepEqual(out, ["a", "b", "x", "A", "B"]);
+  }],
+  ["editor context: cursor only", () => {
+    const ctx = { file: "src/model.py", cursorLine: 52, visible: { start: 40, end: 80 } };
+    assert.equal(formatEditorContext(ctx), "<editor-context>\nfile: src/model.py\nvisible: lines 40-80\ncursor: line 52\n</editor-context>");
+    assert.equal(editorContextLabel(ctx), "model.py:52");
+  }],
+  ["editor context: selection, fenced safely and truncated", () => {
+    const ctx = { file: "a.md", cursorLine: 3, selection: { start: 2, end: 3, text: "```js\nx\n```" } };
+    const out = formatEditorContext(ctx);
+    assert.ok(out.includes("selection: lines 2-3\n~~~~\n```js"), out);
+    assert.equal(editorContextLabel(ctx), "a.md:2-3");
+    const long = formatEditorContext({ file: "b", cursorLine: 1, selection: { start: 1, end: 900, text: "x".repeat(5000) } });
+    assert.ok(long.includes("(selection truncated)") && long.length < 4300);
   }],
   ["interruption policy", () => {
     for (const t of ["", "mm-hmm", "Yeah.", "okay okay", "Go on.", "uh huh", "Got it", "right"]) assert.equal(classifyInterruption(t), "resume", t);

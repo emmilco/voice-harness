@@ -186,3 +186,9 @@ button.listening {
 }
 .step-body > :first-child { margin-top: 0; }
 .step-body > :last-child { margin-bottom: 0; }
+.context-chip {
+  margin-top: 4px;
+  font-size: 0.8em;
+  font-family: var(--vscode-editor-font-family);
+  color: var(--vscode-descriptionForeground);
+}

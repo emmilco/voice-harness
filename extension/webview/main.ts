@@ -115,6 +115,11 @@ window.addEventListener("message", (event: MessageEvent<ToWebview>) => {
       endAgentMessage();
       const bubble = div("message user", m.text);
       if (m.spoken) bubble.classList.add("spoken");
+      if (m.context) {
+        const chip = div("context-chip", `📎 ${m.context}`);
+        chip.title = "Your editor position was sent with this message";
+        bubble.appendChild(chip);
+      }
       append(bubble);
       break;
     }

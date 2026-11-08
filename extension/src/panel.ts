@@ -11,12 +11,15 @@ import {
   StepSequencer,
   VoiceClient,
   classifyInterruption,
+  editorContextLabel,
+  formatEditorContext,
   type ExplainStep,
   type Figure,
   type PermissionRequest,
   type VoiceEvent,
 } from "@voice-harness/core";
 import { EditorControl } from "./editorControl";
+import { EditorTracker } from "./editorTracker";
 import type { FromWebview, ToWebview, VoiceUiState } from "./protocol";
 import { resolveTool } from "./toolchain";
 
@@ -48,6 +51,7 @@ export class HarnessPanel implements vscode.Disposable {
   /** Editor effects waiting for speech to reach their place, keyed by voice marker id. */
   private readonly pendingMarks = new Map<number, () => void>();
   private readonly editor: EditorControl;
+  private readonly tracker: EditorTracker;
   private disposed = false;
 
   static show(context: vscode.ExtensionContext, output: vscode.OutputChannel): void {
@@ -88,6 +92,7 @@ export class HarnessPanel implements vscode.Disposable {
     private readonly output: vscode.OutputChannel,
   ) {
     this.editor = new EditorControl(workspace);
+    this.tracker = new EditorTracker(workspace);
     this.speakReplies = vscode.workspace.getConfiguration("voiceHarness").get<boolean>("speakReplies", true);
     panel.webview.html = this.html();
     panel.webview.onDidReceiveMessage((m: FromWebview) => this.onMessage(m));
@@ -208,14 +213,18 @@ export class HarnessPanel implements vscode.Disposable {
     const session = this.session;
     if (!session) return;
     this.suppressSpeech = false;
+    const context = vscode.workspace.getConfiguration("voiceHarness").get<boolean>("sendEditorContext", true)
+      ? this.tracker.current()
+      : undefined;
+    const prompt = context ? `${formatEditorContext(context)}\n\n${text}` : text;
     this.post({ type: "partial", text: "", source: null });
-    this.post({ type: "user", text, spoken });
+    this.post({ type: "user", text, spoken, context: context ? editorContextLabel(context) : undefined });
     this.post({ type: "state", state: "busy" });
     // `turn` is read in `finally`, which always runs after this assignment completes.
     let turn!: Promise<void>;
     turn = (async () => {
       try {
-        const stopReason = await session.prompt(text);
+        const stopReason = await session.prompt(prompt);
         this.speak(this.chunker.flush());
         this.post({ type: "turnEnd", stopReason });
       } catch (err) {
@@ -540,5 +549,6 @@ export class HarnessPanel implements vscode.Disposable {
     this.session?.dispose();
     this.voice?.dispose();
     this.editor.dispose();
+    this.tracker.dispose();
   }
 }

@@ -9,7 +9,7 @@ export type ToWebview =
   | { type: "voice"; state: VoiceUiState; speak: boolean; microphone: boolean; detail?: string }
   | { type: "partial"; text: string; source: "user" | "interruption" | null }
   | { type: "level"; db: number }
-  | { type: "user"; text: string; spoken: boolean }
+  | { type: "user"; text: string; spoken: boolean; context?: string }
   | { type: "agentText"; chunk: string }
   | { type: "turnEnd"; stopReason: string }
   | { type: "tool"; id: string; title?: string; kind?: string; status?: string; isUpdate: boolean }

@@ -62,6 +62,11 @@
           "type": "boolean",
           "default": false,
           "description": "Pause Claude's speech automatically when you start talking over it. Off: speech stops only when you press Talk or Stop. Takes effect when the panel is reopened."
+        },
+        "voiceHarness.sendEditorContext": {
+          "type": "boolean",
+          "default": true,
+          "description": "Send the open file, visible lines, cursor line and selection with each message, so \"this\" and \"here\" refer to what you're looking at."
         }
       }
     },
