@@ -5,7 +5,11 @@ import { Completer } from "./completer";
 import { highlight } from "./highlight";
 import { ToolCards, renderToolContent } from "./tools";
 
-declare function acquireVsCodeApi(): { postMessage(message: FromWebview): void };
+declare function acquireVsCodeApi(): {
+  postMessage(message: FromWebview): void;
+  getState(): { history?: string[] } | undefined;
+  setState(state: { history?: string[] }): void;
+};
 const vscode = acquireVsCodeApi();
 
 // Raw HTML in agent output is escaped, never rendered.
@@ -155,6 +159,35 @@ input.addEventListener("drop", (e) => {
   e.preventDefault();
   images.forEach(addImage);
 });
+/** Sent messages, oldest first; ↑/↓ walk it like a shell history. */
+const history: string[] = vscode.getState()?.history ?? [];
+let historyIndex = history.length;
+let draft = "";
+
+function remember(text: string): void {
+  if (text && history[history.length - 1] !== text) history.push(text);
+  if (history.length > 100) history.splice(0, history.length - 100);
+  vscode.setState({ ...(vscode.getState() ?? {}), history });
+  historyIndex = history.length;
+}
+
+/** ↑ at the start of the box (or in an empty box) and ↓ at its end move through history. */
+function walkHistory(e: KeyboardEvent): boolean {
+  const atStart = input.selectionStart === 0 && input.selectionEnd === 0;
+  const atEnd = input.selectionStart === input.value.length;
+  if (e.key === "ArrowUp" && (atStart || !input.value) && historyIndex > 0) {
+    if (historyIndex === history.length) draft = input.value;
+    historyIndex--;
+  } else if (e.key === "ArrowDown" && atEnd && historyIndex < history.length) {
+    historyIndex++;
+  } else {
+    return false;
+  }
+  input.value = historyIndex === history.length ? draft : history[historyIndex];
+  const at = e.key === "ArrowUp" ? 0 : input.value.length;
+  input.setSelectionRange(at, at);
+  return true;
+}
 let voiceUsable = false;
 let voiceText = "";
 const meter = document.createElement("span");
@@ -230,6 +263,7 @@ function updateControls(): void {
 function send(): void {
   const text = input.value.trim();
   if ((!text && !pendingImages.length) || !ready) return;
+  remember(text);
   input.value = "";
   const images = pendingImages.splice(0).map(({ mimeType, data }) => ({ mimeType, data }));
   renderImageTray();
@@ -512,7 +546,7 @@ window.addEventListener("message", (event: MessageEvent<ToWebview>) => {
 });
 
 input.addEventListener("keydown", (e) => {
-  if (completer.handleKey(e)) {
+  if (completer.handleKey(e) || walkHistory(e)) {
     e.preventDefault();
     return;
   }
