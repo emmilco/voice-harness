@@ -83,6 +83,8 @@ Passed to the agent at session start. All are **display-only** — they change w
 
 **Decided — panel content security policy (M4, Elliot).** Scripts: nonce only. Styles: `'unsafe-inline'` allowed, because Mermaid emits `<style>` elements; images and fonts only from the extension or `data:`, and no network access, so injected styles can neither run code nor send data anywhere.
 
+**Decided — transitive `@anthropic-ai/sdk` accepted (Elliot, policy exception).** Elliot's QMS §11.1 says the `anthropic` SDK shall not be installed. `@anthropic-ai/sdk` arrives as a dependency of `@anthropic-ai/claude-agent-sdk`, on which `claude-agent-acp` is built; it is in `node_modules/` and in the packaged `.vsix`. No harness code imports it or calls the API. The rule's purpose (no per-token billing) is enforced by the billing guard (`core/src/billingGuard.ts`), which requires a claude.ai login and refuses API keys, `apiKeyHelper` and alternate providers. Do not add direct uses of the SDK.
+
 **Decided — MCP transport.** A tiny stdio MCP server the agent launches, relaying calls to the extension over a local socket. (ACP agents must support stdio MCP servers; HTTP support is optional.)
 
 ### 4.3 Speech vs screen
