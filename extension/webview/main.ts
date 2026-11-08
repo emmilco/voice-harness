@@ -143,6 +143,17 @@ window.addEventListener("message", (event: MessageEvent<ToWebview>) => {
     case "notice":
       append(div("notice", m.text));
       break;
+    case "step": {
+      endAgentMessage();
+      const bubble = div("message agent step");
+      const lines = m.startLine === m.endLine ? `line ${m.startLine}` : `lines ${m.startLine}–${m.endLine}`;
+      bubble.appendChild(div("step-ref", `${m.file} · ${lines}`));
+      const body = div("step-body");
+      body.innerHTML = md.render(m.text);
+      bubble.appendChild(body);
+      append(bubble);
+      break;
+    }
     case "figure": {
       endAgentMessage();
       const block = div("figure");

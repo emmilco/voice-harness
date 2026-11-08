@@ -3,6 +3,9 @@ import Foundation
 /// A command from the harness, one JSON object per stdin line.
 ///
 /// - `speak` {id, text}: queue one sentence for speech.
+/// - `mark` {id}: queue a marker; `marked` {id} is emitted when playback reaches it.
+/// - `render` {id, text, voice?, path}: synthesize to a 24 kHz 16-bit WAV file; emits `rendered`.
+/// - `listVoices`: emits `voices` with the English voice names.
 /// - `stopSpeaking`: drop queued and playing speech.
 /// - `pauseSpeaking` / `resumeSpeaking`: pause or continue playback.
 /// - `listenStart`: stop any speech, play the start tone, begin a user turn.
@@ -13,6 +16,8 @@ struct Command: Decodable {
     let cmd: String
     let id: Int?
     let text: String?
+    let voice: String?
+    let path: String?
 }
 
 /// Writes one JSON event per stdout line. Other stdout output (library logging)

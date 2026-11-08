@@ -82,7 +82,7 @@ if micAvailable && wantInterruptions {
 }
 
 let speaker = Speaker(kokoro: kokoro, voice: voice, audio: audio)
-let controller = Controller(audio: audio, speaker: speaker, vad: vad, locale: locale)
+let controller = Controller(audio: audio, speaker: speaker, vad: vad, locale: locale, defaultVoice: voice)
 audio.onDeviceChange = { result in
     switch result {
     case .success(let (input, output)):

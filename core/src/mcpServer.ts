@@ -63,6 +63,34 @@ server.registerTool(
   },
 );
 
+server.registerTool(
+  "explain_code",
+  {
+    description:
+      "One step of a code walkthrough: highlights a small range in Elliot's editor and says the words that go with it. " +
+      "The words appear in the chat and are spoken; the highlight lands as they begin. Walk through code as a sequence " +
+      "of these calls, one small piece each (usually one to six lines), numbering them with `step` from 1. Put the " +
+      "explanation in `say`, not in your reply text. Display-only; never changes files.",
+    inputSchema: {
+      path: z.string().describe("File path, absolute or relative to the workspace root"),
+      start_line: z.number().int().min(1).describe("First line to highlight (1-based)"),
+      end_line: z.number().int().min(1).describe("Last line to highlight (1-based, inclusive)"),
+      say: z.string().min(1).describe('One or two spoken sentences about exactly these lines ("Here we see…", "Notice these two lines…")'),
+      step: z.number().int().min(1).optional().describe("Position of this step in the walkthrough, starting at 1"),
+    },
+  },
+  async ({ path: p, start_line, end_line, say, step }) => {
+    const resolved = path.resolve(WORKSPACE, p);
+    if (resolved !== WORKSPACE && !resolved.startsWith(WORKSPACE + path.sep)) {
+      return { isError: true, content: [{ type: "text" as const, text: "Path is outside the workspace." }] };
+    }
+    if (end_line < start_line) {
+      return { isError: true, content: [{ type: "text" as const, text: "end_line is before start_line." }] };
+    }
+    return result(await relay({ tool: "explain_code", path: resolved, start_line, end_line, say, step }), "Queued for Elliot.");
+  },
+);
+
 const IMAGE_EXTENSIONS = new Set([".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg"]);
 
 server.registerTool(

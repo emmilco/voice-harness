@@ -4,12 +4,18 @@ import Foundation
 
 /// Speaks queued sentences in order: synthesizes each with Kokoro, schedules it
 /// on the speech player, and reports `spoke` as each finishes playing.
+/// Markers queued between sentences report `marked` when playback reaches them.
 /// `speechActive` / `speechIdle` events bracket any stretch of speech.
 actor Speaker {
+    private enum Item {
+        case speech(id: Int, text: String)
+        case mark(id: Int)
+    }
+
     private let kokoro: KokoroAneManager
     private let voice: String
     private let audio: AudioIO
-    private var queue: [(id: Int, text: String)] = []
+    private var queue: [Item] = []
     private var generation = 0
     private var synthesizing = false
     private var outstanding = 0
@@ -25,9 +31,22 @@ actor Speaker {
     var isActive: Bool { !queue.isEmpty || synthesizing || outstanding > 0 }
 
     func enqueue(id: Int, text: String) {
-        queue.append((id, text))
+        queue.append(.speech(id: id, text: text))
         pump()
         reportActivity()
+    }
+
+    func enqueueMark(id: Int) {
+        queue.append(.mark(id: id))
+        pump()
+        reportActivity()
+    }
+
+    /// Synthesizes `text` in `voice` without playing it.
+    func render(text: String, voice: String) async throws -> (samples: [Float], ms: Int) {
+        let started = Date()
+        let result = try await kokoro.synthesizeDetailed(text: text, voice: voice)
+        return (result.samples, Int(Date().timeIntervalSince(started) * 1000))
     }
 
     func stop() {
@@ -59,11 +78,36 @@ actor Speaker {
     }
 
     private func pump() {
-        guard !synthesizing, !queue.isEmpty else { return }
-        synthesizing = true
-        let item = queue.removeFirst()
+        while !synthesizing, !queue.isEmpty {
+            switch queue.removeFirst() {
+            case .mark(let id):
+                placeMark(id: id)
+            case .speech(let id, let text):
+                synthesizing = true
+                let gen = generation
+                Task { await self.synthesize((id, text), generation: gen) }
+            }
+        }
+    }
+
+    /// Reports the marker now if nothing is waiting to play; otherwise after the audio already scheduled.
+    private func placeMark(id: Int) {
+        guard outstanding > 0, let silence = audio.makeSpeechBuffer([0]) else {
+            Events.emit("marked", ["id": id])
+            return
+        }
         let gen = generation
-        Task { await self.synthesize(item, generation: gen) }
+        outstanding += 1
+        audio.speechPlayer.scheduleBuffer(silence, completionCallbackType: .dataPlayedBack) { _ in
+            Task { await self.markReached(id: id, generation: gen) }
+        }
+    }
+
+    private func markReached(id: Int, generation gen: Int) {
+        guard gen == generation else { return }
+        outstanding -= 1
+        Events.emit("marked", ["id": id])
+        reportActivity()
     }
 
     private func synthesize(_ item: (id: Int, text: String), generation gen: Int) async {

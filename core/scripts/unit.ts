@@ -1,6 +1,6 @@
 // Unit tests for the pure speech logic: `npm run unit -w core`.
 import assert from "node:assert/strict";
-import { SpeechChunker, classifyInterruption } from "../src/index";
+import { SpeechChunker, StepSequencer, classifyInterruption } from "../src/index";
 
 function speakAll(chunks: string[]): string[] {
   const c = new SpeechChunker();
@@ -57,13 +57,64 @@ const cases: [string, () => void][] = [
     const later = "This later sentence is also rather long, with a comma in it, but only the first sentence of a turn is split.";
     assert.deepEqual(speakAll(["Short one. " + later]), ["Short one.", later]);
   }],
+  ["steps in order pass straight through", () => {
+    const out: string[] = [];
+    const seq = new StepSequencer<string>((s) => out.push(s));
+    seq.push("a", 1);
+    seq.push("b", 2);
+    seq.push("c", 3);
+    assert.deepEqual(out, ["a", "b", "c"]);
+  }],
+  ["early step held until the gap fills", () => {
+    const out: string[] = [];
+    const seq = new StepSequencer<string>((s) => out.push(s));
+    seq.push("a", 1);
+    seq.push("c", 3);
+    assert.deepEqual(out, ["a"]);
+    seq.push("b", 2);
+    assert.deepEqual(out, ["a", "b", "c"]);
+    seq.reset();
+  }],
+  ["step 1 starts a new walkthrough; unnumbered steps pass", () => {
+    const out: string[] = [];
+    const seq = new StepSequencer<string>((s) => out.push(s));
+    seq.push("a", 1);
+    seq.push("b", 2);
+    seq.push("x");
+    seq.push("A", 1);
+    seq.push("B", 2);
+    assert.deepEqual(out, ["a", "b", "x", "A", "B"]);
+  }],
   ["interruption policy", () => {
     for (const t of ["", "mm-hmm", "Yeah.", "okay okay", "Go on.", "uh huh", "Got it", "right"]) assert.equal(classifyInterruption(t), "resume", t);
     for (const t of ["wait, why the square root?", "stop", "no, the other file", "yeah but what about the mask"]) assert.equal(classifyInterruption(t), "newTurn", t);
   }],
 ];
 
+const asyncCases: [string, () => Promise<void>][] = [
+  ["held steps released in order after the wait", async () => {
+    const out: string[] = [];
+    const seq = new StepSequencer<string>((s) => out.push(s), 50);
+    seq.push("a", 1);
+    seq.push("d", 4);
+    seq.push("c", 3);
+    await new Promise((r) => setTimeout(r, 80));
+    assert.deepEqual(out, ["a", "c", "d"]);
+    seq.push("e", 5);
+    assert.deepEqual(out, ["a", "c", "d", "e"]);
+  }],
+];
+
 let failed = 0;
+for (const [name, fn] of asyncCases) {
+  try {
+    await fn();
+    console.log(`ok   ${name}`);
+  } catch (err) {
+    failed++;
+    console.log(`FAIL ${name}\n     ${(err as Error).message.split("\n").join("\n     ")}`);
+  }
+}
 for (const [name, fn] of cases) {
   try {
     fn();

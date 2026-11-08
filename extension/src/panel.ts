@@ -7,8 +7,10 @@ import {
   BillingGuardError,
   SPEECH_LAYER,
   SpeechChunker,
+  StepSequencer,
   VoiceClient,
   classifyInterruption,
+  type ExplainStep,
   type Figure,
   type PermissionRequest,
   type VoiceEvent,
@@ -36,11 +38,14 @@ export class HarnessPanel implements vscode.Disposable {
   private inputDevice: string | undefined;
   private speakReplies: boolean;
   private readonly chunker = new SpeechChunker();
+  private readonly steps = new StepSequencer<ExplainStep>((step) => this.presentStep(step));
   /** True from a cancel (or the start of listening) until the next turn starts. */
   private suppressSpeech = false;
   private turn: Promise<void> | null = null;
   private readonly pendingPermissions = new Map<string, (optionId: string | null) => void>();
   private readonly pendingFigures = new Map<string, (result: { ok: boolean; error?: string }) => void>();
+  /** Editor effects waiting for speech to reach their place, keyed by voice marker id. */
+  private readonly pendingMarks = new Map<number, () => void>();
   private readonly editor: EditorControl;
   private disposed = false;
 
@@ -170,8 +175,9 @@ export class HarnessPanel implements vscode.Disposable {
             if (t.locations.length && (t.kind === "read" || t.kind === "edit")) void this.editor.follow(t.locations);
           },
           onPermission: (req, signal) => this.askPermission(req, signal),
-          onShowCode: (range) => this.editor.showCode(range),
-          onClearHighlight: async () => this.editor.clearHighlight(),
+          onShowCode: async (range) => this.inStepWithSpeech(() => void this.editor.showCode(range)),
+          onExplainCode: async (step) => this.steps.push(step, step.step),
+          onClearHighlight: async () => this.inStepWithSpeech(() => this.editor.clearHighlight()),
           onShowFigure: (figure) => this.showFigure(figure),
           onLog: (line) => this.output.appendLine(line),
           onExit: (reason) => {
@@ -325,6 +331,15 @@ export class HarnessPanel implements vscode.Disposable {
       }
       case "spoke":
         break;
+      case "marked": {
+        const effect = this.pendingMarks.get(e.id);
+        this.pendingMarks.delete(e.id);
+        effect?.();
+        break;
+      }
+      case "rendered":
+      case "voices":
+        break;
       case "error":
         if (this.voiceState === "warming") this.setVoice("idle", this.inputDevice ? `mic: ${this.inputDevice}` : undefined);
         this.output.appendLine(`voice error: ${e.message}`);
@@ -356,6 +371,34 @@ export class HarnessPanel implements vscode.Disposable {
     this.voice.listenStart();
   }
 
+  /**
+   * Applies an editor effect when speech reaches the point where the agent asked for it, so
+   * highlights move with the spoken explanation rather than with (faster) generation. Without
+   * speech the effect applies at once.
+   */
+  private inStepWithSpeech(effect: () => void): void {
+    if (!this.voice || !this.speakReplies || this.suppressSpeech || this.voiceState === "loading" || this.voiceState === "unavailable") {
+      effect();
+      return;
+    }
+    this.pendingMarks.set(this.voice.mark(), effect);
+  }
+
+  /** One walkthrough step: its words in the chat, its highlight as speech reaches it, then its words spoken. */
+  private presentStep(step: ExplainStep): void {
+    this.speak(this.chunker.flush());
+    this.post({
+      type: "step",
+      file: path.relative(this.workspace, step.range.path),
+      startLine: step.range.startLine,
+      endLine: step.range.endLine,
+      text: step.say,
+    });
+    this.inStepWithSpeech(() => void this.editor.showCode(step.range));
+    const words = new SpeechChunker();
+    this.speak([...words.push(step.say + "\n"), ...words.flush()]);
+  }
+
   private speak(sentences: string[]): void {
     if (!this.voice || !this.speakReplies || this.suppressSpeech) return;
     for (const s of sentences) this.voice.speak(s);
@@ -364,6 +407,8 @@ export class HarnessPanel implements vscode.Disposable {
   /** Stops speech now and drops speech for the rest of the current turn. */
   private silence(): void {
     this.suppressSpeech = true;
+    this.pendingMarks.clear();
+    this.steps.reset();
     this.chunker.reset();
     this.voice?.stopSpeaking();
   }

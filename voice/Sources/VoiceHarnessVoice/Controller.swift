@@ -20,6 +20,7 @@ actor Controller {
     private let speaker: Speaker
     private let vad: VadManager?
     private let locale: Locale
+    private let defaultVoice: String
     private var segmentation: VadSegmentationConfig
 
     private var mode = Mode.idle
@@ -34,7 +35,8 @@ actor Controller {
     private var levelPeak: Float = 0
     private var lastLevelEmit = Date.distantPast
 
-    init(audio: AudioIO, speaker: Speaker, vad: VadManager?, locale: Locale) {
+    init(audio: AudioIO, speaker: Speaker, vad: VadManager?, locale: Locale, defaultVoice: String) {
+        self.defaultVoice = defaultVoice
         self.audio = audio
         self.speaker = speaker
         self.vad = vad
@@ -50,6 +52,24 @@ actor Controller {
         switch command.cmd {
         case "speak":
             if let id = command.id, let text = command.text { await speaker.enqueue(id: id, text: text) }
+        case "mark":
+            if let id = command.id { await speaker.enqueueMark(id: id) }
+        case "render":
+            guard let id = command.id, let text = command.text, let path = command.path else { return }
+            let voice = command.voice ?? defaultVoice
+            let speaker = self.speaker
+            Task {
+                do {
+                    let (samples, ms) = try await speaker.render(text: text, voice: voice)
+                    try WavFile.write(samples: samples, sampleRate: Int(AudioIO.speechRate), to: URL(fileURLWithPath: path))
+                    Events.emit("rendered", ["id": id, "path": path, "voice": voice, "ms": ms,
+                                             "audioMs": Int(Double(samples.count) / AudioIO.speechRate * 1000)])
+                } catch {
+                    Events.emit("error", ["id": id, "message": "render failed for \(voice): \(error.localizedDescription)"])
+                }
+            }
+        case "listVoices":
+            Events.emit("voices", ["voices": KokoroAneVariant.english.knownVoices])
         case "stopSpeaking":
             if mode == .interrupting { await dropTranscription() }
             await speaker.stop()

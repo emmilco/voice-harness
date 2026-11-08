@@ -21,6 +21,9 @@ export type VoiceEvent =
   | { event: "speechActive" }
   | { event: "speechIdle" }
   | { event: "spoke"; id: number }
+  | { event: "marked"; id: number }
+  | { event: "rendered"; id: number; path: string; voice: string; ms: number; audioMs: number }
+  | { event: "voices"; voices: string[] }
   | { event: "micWarming" }
   | { event: "listening" }
   | { event: "partial"; text: string; source: "user" | "interruption" }
@@ -85,6 +88,13 @@ export class VoiceClient {
   speak(text: string): number {
     const id = this.nextId++;
     this.send({ cmd: "speak", id, text });
+    return id;
+  }
+
+  /** Queues a marker behind the speech already queued; the voice process emits `marked` with this id when playback reaches it. */
+  mark(): number {
+    const id = this.nextId++;
+    this.send({ cmd: "mark", id });
     return id;
   }
 

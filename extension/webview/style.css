@@ -176,3 +176,13 @@ button.listening {
   text-align: center;
   color: var(--vscode-descriptionForeground);
 }
+
+.message.step { border-left: 3px solid var(--vscode-editorOverviewRuler-findMatchForeground, var(--vscode-textLink-foreground)); }
+.step-ref {
+  font-size: 0.8em;
+  font-family: var(--vscode-editor-font-family);
+  color: var(--vscode-descriptionForeground);
+  margin-bottom: 4px;
+}
+.step-body > :first-child { margin-top: 0; }
+.step-body > :last-child { margin-bottom: 0; }

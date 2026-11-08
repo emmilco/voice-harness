@@ -15,7 +15,8 @@ voice-harness/
 │   │   ├── agentSession.ts  # ACP session with claude-agent-acp: start, prompt, cancel, handlers
 │   │   ├── billingGuard.ts  # refuses per-token billing configurations
 │   │   ├── relay.ts         # Unix-socket relay from the MCP server to the front end
-│   │   ├── mcpServer.ts     # stdio MCP server: show_code, clear_highlight, show_figure (bundled to extension/dist)
+│   │   ├── mcpServer.ts     # stdio MCP server: show_code, explain_code, clear_highlight, show_figure (bundled to extension/dist)
+│   │   ├── stepSequencer.ts # delivers numbered explain_code steps in order
 │   │   ├── speechLayer.ts   # system-prompt text appended to Claude Code's standard prompt
 │   │   ├── speechText.ts    # SpeechChunker: streamed markdown → speakable sentences (skips fences, tables)
 │   │   ├── turnPolicy.ts    # classifyInterruption: resume vs new turn
@@ -42,6 +43,8 @@ voice-harness/
 │       ├── Speaker.swift       # sentence queue → Kokoro → playback; pause/resume/stop
 │       ├── LiveTranscription.swift # one live SpeechAnalyzer utterance
 │       └── Controller.swift    # listen / speak / interrupt state machine
+├── tools/
+│   └── voice-sampler/ # local page for hearing every English Kokoro voice: `node tools/voice-sampler/server.mjs` → http://127.0.0.1:4317
 ├── docs/              # specs and design documents
 │   └── MVP_SPEC.md    # MVP scope, architecture, build order, open questions
 └── spike/             # throwaway milestone spikes (not product code)

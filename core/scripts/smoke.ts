@@ -50,6 +50,7 @@ let text = "";
 let shown = 0;
 const chunker = new SpeechChunker();
 const spoken: string[] = [];
+const pendingMarks = new Map<number, string>();
 let voiceIdle: () => void = () => {};
 let voiceReady: () => void = () => {};
 const ready = new Promise<void>((r) => (voiceReady = r));
@@ -64,6 +65,10 @@ const voice = SPEAK
         if (e.event === "ready") voiceReady();
         if (e.event === "speechIdle") voiceIdle();
         if (e.event === "spoke") log("voice", `spoke #${e.id}`);
+        if (e.event === "marked" && pendingMarks.has(e.id)) {
+          log("editor", `APPLIED ${pendingMarks.get(e.id)}`);
+          pendingMarks.delete(e.id);
+        }
         if (e.event === "error" || e.event === "fatal") log("voice", e.message);
       },
       onExit: (r) => log("voice", r),
@@ -100,9 +105,28 @@ const session = await AgentSession.start({
     },
     onShowCode: async (r) => {
       shown++;
+      if (voice) {
+        const where = `show_code ${path.relative(WORKSPACE, r.path)}:${r.startLine}-${r.endLine}`;
+        pendingMarks.set(voice.mark(), where);
+        log("editor", `queued ${where}`);
+        return;
+      }
       log("editor", `show_code ${path.relative(WORKSPACE, r.path)}:${r.startLine}-${r.endLine}`);
     },
     onClearHighlight: async () => log("editor", "clear_highlight"),
+    onExplainCode: async (s) => {
+      shown++;
+      const where = `explain_code #${s.step ?? "?"} ${path.relative(WORKSPACE, s.range.path)}:${s.range.startLine}-${s.range.endLine}`;
+      if (voice) {
+        say(chunker.flush());
+        pendingMarks.set(voice.mark(), where);
+        log("editor", `queued ${where}`);
+        const words = new SpeechChunker();
+        say([...words.push(s.say + "\n"), ...words.flush()]);
+      } else {
+        log("step", `${where}: ${s.say}`);
+      }
+    },
     onShowFigure: async (f) => {
       figures++;
       const problem = await checkFigure(f);

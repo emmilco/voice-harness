@@ -43,6 +43,14 @@ export interface CodeRange {
   endLine: number;
 }
 
+/** One step of a walkthrough: a small range of code and the words that go with it. */
+export interface ExplainStep {
+  range: CodeRange;
+  say: string;
+  /** 1-based position in the walkthrough, when the agent numbered its steps. */
+  step?: number;
+}
+
 /** Callbacks through which a front end (VS Code, a test script) presents the session. */
 export interface SessionHandlers {
   onText(chunk: string): void;
@@ -51,6 +59,8 @@ export interface SessionHandlers {
   /** Resolve with the chosen optionId, or null to cancel. `signal` aborts when the turn is cancelled. */
   onPermission(req: PermissionRequest, signal: AbortSignal): Promise<string | null>;
   onShowCode(range: CodeRange): Promise<void>;
+  /** Show the step's words, speak them, and highlight its range as they begin. */
+  onExplainCode(step: ExplainStep): Promise<void>;
   onClearHighlight(): Promise<void>;
   /** Render a figure; resolve with an error message if it could not be rendered. */
   onShowFigure(figure: Figure): Promise<{ ok: true } | { ok: false; error: string }>;
@@ -114,6 +124,13 @@ export class AgentSession {
           return { ok: true };
         case "show_figure":
           return handlers.onShowFigure({ kind: req.kind, content: req.content, caption: req.caption });
+        case "explain_code":
+          await handlers.onExplainCode({
+            range: { path: req.path, startLine: req.start_line, endLine: req.end_line },
+            say: req.say,
+            step: req.step,
+          });
+          return { ok: true };
       }
     });
 

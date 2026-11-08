@@ -70,3 +70,21 @@ Hypothesis: with device-change recovery, AirPods input works in VS Code both whe
 Tried: Elliot retested in the Extension Development Host: (1) AirPods in before opening the panel, talk after ready; (2) AirPods removed and reinserted during the session, then talk.
 Outcome: both worked (Elliot's report).
 Learning: H-device-switch confirmed for the reported failure: AVAudioEngine stops on device/route changes (including AirPods entering headset mode) and must be restarted with a rebuilt tap. Closed.
+
+## Attempt 13 — 2026-11-07 13:05:00
+Hypothesis: with highlights timed to speech by markers and a speech-layer instruction to walk in small steps, a spoken walkthrough moves the highlight in step with the explanation.
+Tried: `smoke --speak "Walk me through TinyGPT's forward method in tiny_gpt.py."` (markers applied as in the panel), then the same prompt without speech to read Claude's full text.
+Outcome: first step correct (highlight 14-15, then four sentences about it). Then three show_code calls (16, 17-18, 19) back to back with no text between; all three markers fired together when the first step's speech ended; the explanation of lines 16-18 was never written (the reply only summarizes them).
+Learning: marker timing works; the failure is model behaviour — consecutive (possibly parallel) highlight calls with no speech between. Candidate H-prompt: the instruction was too soft (no rule against consecutive/parallel show_code). Falsified if an explicit rule still yields batched calls. Fallback design if so: a single `walkthrough(steps: [{path, lines, say}])` tool that pairs each highlight with its words structurally.
+
+## Attempt 14 — 2026-11-07 13:20:00
+Hypothesis: H-prompt — an explicit numbered rule (highlight, then sentences, then next; never consecutive or parallel show_code) makes Claude interleave words and highlights.
+Tried: rewrote the speech-layer walkthrough instruction; ran the walkthrough prompt twice (no speech) and inspected the full text.
+Outcome: both runs: 5 show_code calls but only 3 text segments (intro, first line, "Finally…" about the last line); the middle steps got highlights with no words, summarized only at the end.
+Learning: H-prompt falsified (2/2). Instruction wording does not overcome the model's habit of issuing several highlight calls before writing. Convergence check: ruled out marker timing (works) and prompt wording; remaining approach is structural — make each highlight carry its own words, e.g. a tool explain_code(path, start, end, say) that highlights and speaks together.
+
+## Attempt 15 — 2026-11-07 13:50:00
+Hypothesis: a structural tool, explain_code(path, start, end, say, step), pairs every highlight with its words regardless of how the model batches calls.
+Tried: added explain_code (MCP tool, StepSequencer ordering, panel step bubble, marker-timed highlight then spoken words); two text-only walkthrough runs; one spoken run logging marker and playback times.
+Outcome: both text runs: 5 numbered explain_code steps (lines 14-15, 16, 17, 18, 19), each with its own sentences. Calls were issued in parallel, so all five executed together once generation finished (~12-15 s). Spoken run: each highlight applied exactly when the previous step's last sentence finished (26.9 s, 42.4 s, 52.5 s, 65.5 s), immediately before that step's words.
+Learning: attention now moves with the explanation. Remaining cost: a walkthrough's first step waits for the whole batch to be generated (a lead-in sentence, then ~4 s of silence here). Possible later improvement: present steps from the streamed tool-call announcement instead of waiting for execution. Closed.
