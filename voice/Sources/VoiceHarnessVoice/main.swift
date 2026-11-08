@@ -18,7 +18,8 @@ func argument(_ name: String) -> String? {
     return args[i + 1]
 }
 
-let modelsDirectory = URL(fileURLWithPath: argument("--models") ?? "/Users/Shared/ai/models/fluidaudio")
+let modelsDirectory = URL(fileURLWithPath: argument("--models")
+    ?? (NSHomeDirectory() + "/Library/Application Support/voice-harness/models"))
 let voice = argument("--voice") ?? "af_heart"
 let voiceProcessing = CommandLine.arguments.contains("--voice-processing")
 let wantMic = !CommandLine.arguments.contains("--no-mic")

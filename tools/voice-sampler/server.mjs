@@ -17,7 +17,7 @@ const PORT = Number(process.env.PORT ?? 4317);
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, "..", "..");
 const BINARY = path.join(ROOT, "voice", ".build", "release", "VoiceHarnessVoice");
-const MODELS = process.env.VH_MODELS ?? "/Users/Shared/ai/models/fluidaudio";
+const MODELS = process.env.VH_MODELS ?? path.join(os.homedir(), "Library", "Application Support", "voice-harness", "models");
 const MAX_TEXT = 600;
 const ALLOWED_HOSTS = new Set([`127.0.0.1:${PORT}`, `localhost:${PORT}`]);
 

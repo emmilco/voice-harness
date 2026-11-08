@@ -39,7 +39,7 @@ export type VoiceEvent =
 export interface VoiceClientOptions {
   /** Absolute path of the VoiceHarnessVoice binary. */
   binary: string;
-  /** MLP store holding the FluidAudio models. */
+  /** Folder holding the FluidAudio models (downloaded on first use). */
   modelsDirectory: string;
   voice: string;
   /** macOS voice processing (echo cancellation) for use without headphones. */

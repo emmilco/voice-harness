@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
-import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, realpathSync, statSync } from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import * as vscode from "vscode";
 import {
@@ -142,7 +143,7 @@ export class HarnessPanel implements vscode.Disposable {
     const config = vscode.workspace.getConfiguration("voiceHarness");
     const nodePath = resolveTool("node", config.get<string>("nodePath"));
     const claudePath = resolveTool("claude", config.get<string>("claudePath"));
-    const agentEntry = path.join(this.repoRoot, "node_modules", "@agentclientprotocol", "claude-agent-acp", "dist", "index.js");
+    const agentEntry = this.runtimeFile(path.join("node_modules", "@agentclientprotocol", "claude-agent-acp", "dist", "index.js"));
     const mcpServerScript = path.join(this.context.extensionPath, "dist", "mcpServer.mjs");
 
     const missing = [
@@ -238,7 +239,9 @@ export class HarnessPanel implements vscode.Disposable {
 
   private startVoice(): void {
     const config = vscode.workspace.getConfiguration("voiceHarness");
-    const binary = path.join(this.repoRoot, "voice", ".build", "release", "VoiceHarnessVoice");
+    const binary = this.runtimeFile(path.join("bin", "VoiceHarnessVoice"), path.join("voice", ".build", "release", "VoiceHarnessVoice"));
+    const modelsDirectory = config.get<string>("modelsDirectory") || HarnessPanel.DEFAULT_MODELS;
+    mkdirSync(modelsDirectory, { recursive: true });
     if (!existsSync(binary)) {
       this.setVoice("unavailable", `voice process not built (run npm run build): ${binary}`);
       return;
@@ -246,7 +249,7 @@ export class HarnessPanel implements vscode.Disposable {
     this.setVoice("loading", "Loading voice…");
     this.voice = VoiceClient.start({
       binary,
-      modelsDirectory: config.get<string>("modelsDirectory") || "/Users/Shared/ai/models/fluidaudio",
+      modelsDirectory,
       voice: config.get<string>("voice") || "af_heart",
       voiceProcessing: config.get<boolean>("echoCancellation", false),
       interruptions: config.get<boolean>("autoInterrupt", false),
@@ -480,9 +483,16 @@ export class HarnessPanel implements vscode.Disposable {
 
   // MARK: Webview
 
-  /** The repository root. The extension may be installed as a link to `<repo>/extension`, so links are resolved first. */
-  private get repoRoot(): string {
-    return path.resolve(realpathSync(this.context.extensionPath), "..");
+  static readonly DEFAULT_MODELS = path.join(os.homedir(), "Library", "Application Support", "voice-harness", "models");
+
+  /**
+   * A file the extension runs: inside the extension when packaged (`.vsix`), otherwise in the
+   * repository (development install, where the extension folder may be a link to `<repo>/extension`).
+   */
+  private runtimeFile(packaged: string, inRepo: string = packaged): string {
+    const extensionDir = realpathSync(this.context.extensionPath);
+    const candidate = path.join(extensionDir, packaged);
+    return existsSync(candidate) ? candidate : path.join(path.resolve(extensionDir, ".."), inRepo);
   }
 
   private html(): string {

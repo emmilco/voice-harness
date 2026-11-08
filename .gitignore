@@ -3,3 +3,4 @@ dist/
 *.vsix
 core/scripts/.smoke.mjs
 core/scripts/.unit.mjs
+build/

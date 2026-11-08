@@ -33,8 +33,9 @@ let figures = 0;
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, "..", "..");
 const WORKSPACE = path.join(ROOT, "spike", "m0", "fixture");
-const MCP = path.join(ROOT, "extension", "dist", "mcpServer.mjs");
-const AGENT = path.join(ROOT, "node_modules", "@agentclientprotocol", "claude-agent-acp", "dist", "index.js");
+// VH_MCP_SERVER / VH_AGENT_ENTRY point the test at another build, e.g. an unpacked .vsix.
+const MCP = process.env.VH_MCP_SERVER ?? path.join(ROOT, "extension", "dist", "mcpServer.mjs");
+const AGENT = process.env.VH_AGENT_ENTRY ?? path.join(ROOT, "node_modules", "@agentclientprotocol", "claude-agent-acp", "dist", "index.js");
 // --speak: also speak the reply through the chunker and the voice process (plays audio).
 const SPEAK = process.argv.includes("--speak");
 const VOICE_BIN = path.join(ROOT, "voice", ".build", "release", "VoiceHarnessVoice");
@@ -57,7 +58,7 @@ const ready = new Promise<void>((r) => (voiceReady = r));
 const voice = SPEAK
   ? VoiceClient.start({
       binary: VOICE_BIN,
-      modelsDirectory: "/Users/Shared/ai/models/fluidaudio",
+      modelsDirectory: path.join(process.env.HOME ?? "", "Library", "Application Support", "voice-harness", "models"),
       voice: "af_heart",
       voiceProcessing: false,
       interruptions: false,

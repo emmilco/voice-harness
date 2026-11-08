@@ -55,8 +55,8 @@
         },
         "voiceHarness.modelsDirectory": {
           "type": "string",
-          "default": "/Users/Shared/ai/models/fluidaudio",
-          "description": "Model store holding the FluidAudio models (MLP-governed)."
+          "default": "",
+          "description": "Folder for the speech models (downloaded on first use). Empty: ~/Library/Application Support/voice-harness/models."
         },
         "voiceHarness.autoInterrupt": {
           "type": "boolean",
@@ -89,7 +89,12 @@
     "@types/markdown-it": "14.2.0",
     "@types/node": "24.19.2",
     "@types/vscode": "1.145.0",
+    "@vscode/vsce": "4.1.0",
     "esbuild": "0.28.2",
     "typescript": "7.0.2"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/emmilco/voice-harness.git"
   }
 }

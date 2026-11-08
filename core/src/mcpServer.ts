@@ -42,7 +42,7 @@ server.registerTool(
   "show_code",
   {
     description:
-      "Show Elliot a range of lines in a file: opens it in his editor and highlights the range. " +
+      "Show the user a range of lines in a file: opens it in his editor and highlights the range. " +
       "Call this whenever you talk about specific code, before or while you discuss it. " +
       "Display-only; it never changes files.",
     inputSchema: {
@@ -59,7 +59,7 @@ server.registerTool(
     if (end_line < start_line) {
       return { isError: true, content: [{ type: "text" as const, text: "end_line is before start_line." }] };
     }
-    return result(await relay({ tool: "show_code", path: resolved, start_line, end_line }), "Shown to Elliot.");
+    return result(await relay({ tool: "show_code", path: resolved, start_line, end_line }), "Shown to the user.");
   },
 );
 
@@ -67,7 +67,7 @@ server.registerTool(
   "explain_code",
   {
     description:
-      "One step of a code walkthrough: highlights a small range in Elliot's editor and says the words that go with it. " +
+      "One step of a code walkthrough: highlights a small range in the user's editor and says the words that go with it. " +
       "The words appear in the chat and are spoken; the highlight lands as they begin. Walk through code as a sequence " +
       "of these calls, one small piece each (usually one to six lines), numbering them with `step` from 1. Put the " +
       "explanation in `say`, not in your reply text. Display-only; never changes files.",
@@ -87,7 +87,7 @@ server.registerTool(
     if (end_line < start_line) {
       return { isError: true, content: [{ type: "text" as const, text: "end_line is before start_line." }] };
     }
-    return result(await relay({ tool: "explain_code", path: resolved, start_line, end_line, say, step }), "Queued for Elliot.");
+    return result(await relay({ tool: "explain_code", path: resolved, start_line, end_line, say, step }), "Queued for the user.");
   },
 );
 
@@ -97,7 +97,7 @@ server.registerTool(
   "show_figure",
   {
     description:
-      "Show Elliot a figure in the chat panel, beside the conversation. Use it whenever a picture explains better than words: " +
+      "Show the user a figure in the chat panel, beside the conversation. Use it whenever a picture explains better than words: " +
       "charts of numbers (loss curves, distributions, comparisons), diagrams of structure or flow (architectures, data paths), " +
       "or images your code produced. Kinds: " +
       "'vega-lite' — content is a Vega-Lite JSON spec with data inlined under data.values (no URLs; the panel has no network); " +
@@ -123,7 +123,7 @@ server.registerTool(
       }
       payload = resolved;
     }
-    return result(await relay({ tool: "show_figure", kind, content: payload, caption }), "Shown to Elliot.");
+    return result(await relay({ tool: "show_figure", kind, content: payload, caption }), "Shown to the user.");
   },
 );
 

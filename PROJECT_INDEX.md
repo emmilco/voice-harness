@@ -7,6 +7,9 @@ VS Code–based voice + code learning environment: talk aloud with a coding agen
 ```
 voice-harness/
 ├── PROJECT_INDEX.md   # this file
+├── README.md          # user-facing overview, requirements, install, settings
+├── scripts/
+│   └── install-extension.sh # build, package (.vsix into build/, gitignored) and install/update; safe to re-run
 ├── package.json       # npm workspace root (core, extension); scripts: build, check, smoke
 ├── experiment_log.md  # append-only log of failed/diagnosed attempts (QMS §7.3)
 ├── .vscode/           # launch.json (F5 → Extension Development Host on spike/m0/fixture), tasks.json (build)
@@ -54,7 +57,9 @@ voice-harness/
 
 Setup: `npm install --ignore-scripts && npm run build` (builds the TypeScript bundles and the Swift voice process).
 
-Everyday use (development install): `~/.vscode/extensions/emmilco.voice-harness-0.1.0` is a symlink to `extension/`, so the extension loads in every VS Code window and uses this repo's `node_modules/` and `voice/.build/`. Open any folder, then run **Voice Harness: Open Panel**. After changing code: `npm run build`, then **Developer: Reload Window** in open windows. A broken build here breaks the panel everywhere; a packaged `.vsix` install is the planned replacement once the harness is stable.
+Packaged install (any Mac, including work): `scripts/install-extension.sh`. The `.vsix` carries the bundles, the agent adapter (without the SDK's bundled Claude CLI; the user's `claude` is used) and the voice binary in `bin/`; the extension finds these inside itself first, then falls back to the repo layout. Speech models default to `~/Library/Application Support/voice-harness/models`; on this Mac that path is a link to the MLP store `/Users/Shared/ai/models/fluidaudio`.
+
+Everyday use on this Mac (development install): `~/.vscode/extensions/emmilco.voice-harness-0.1.0` is a symlink to `extension/`, so the extension loads in every VS Code window and uses this repo's `node_modules/` and `voice/.build/`. Open any folder, then run **Voice Harness: Open Panel**. After changing code: `npm run build`, then **Developer: Reload Window** in open windows. A broken build here breaks the panel everywhere; a packaged `.vsix` install is the planned replacement once the harness is stable.
 
 Development: open this folder in VS Code and press F5 (Extension Development Host on `spike/m0/fixture`; the development copy takes precedence over the installed link).
 
