@@ -22,6 +22,7 @@ import {
   type PermissionRequest,
   type VoiceEvent,
 } from "@voice-harness/core";
+import { DiffView } from "./diffView";
 import { EditorControl } from "./editorControl";
 import { EditorTracker } from "./editorTracker";
 import type { FromWebview, ToWebview, VoiceUiState } from "./protocol";
@@ -73,6 +74,7 @@ export class HarnessPanel implements vscode.Disposable {
   private readonly pendingMarks = new Map<number, () => void>();
   private readonly editor: EditorControl;
   private readonly tracker: EditorTracker;
+  private readonly diffs = new DiffView();
   private disposed = false;
 
   static show(context: vscode.ExtensionContext, output: vscode.OutputChannel): void {
@@ -171,6 +173,9 @@ export class HarnessPanel implements vscode.Disposable {
       case "figureResult":
         this.pendingFigures.get(m.id)?.({ ok: m.ok, error: m.error });
         break;
+      case "openDiff":
+        await this.diffs.open(m.path, m.oldText, m.newText);
+        break;
       case "listSessions":
         await this.listSessions();
         break;
@@ -231,7 +236,17 @@ export class HarnessPanel implements vscode.Disposable {
           },
           onToolCall: (t, isUpdate) => {
             this.flushReplayedUser();
-            this.post({ type: "tool", id: t.id, title: t.title, kind: t.kind, status: t.status, isUpdate });
+            this.post({
+              type: "tool",
+              id: t.id,
+              title: t.title,
+              kind: t.kind,
+              status: t.status,
+              name: t.name,
+              content: t.content,
+              hidden: t.name?.startsWith("mcp__harness__"),
+              isUpdate,
+            });
             if (this.replaying) return;
             if (!isUpdate) this.speak(this.chunker.flush());
             if (t.locations.length && (t.kind === "read" || t.kind === "edit")) void this.editor.follow(t.locations);
@@ -706,7 +721,7 @@ export class HarnessPanel implements vscode.Disposable {
       };
       this.pendingPermissions.set(requestId, finish);
       signal.addEventListener("abort", () => finish(null), { once: true });
-      this.post({ type: "permission", requestId, title: req.title, kind: req.kind, options: req.options });
+      this.post({ type: "permission", requestId, title: req.title, kind: req.kind, content: req.content, options: req.options });
     });
   }
 
@@ -782,5 +797,6 @@ export class HarnessPanel implements vscode.Disposable {
     this.voice?.dispose();
     this.editor.dispose();
     this.tracker.dispose();
+    this.diffs.dispose();
   }
 }

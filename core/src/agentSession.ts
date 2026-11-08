@@ -10,8 +10,17 @@ export interface Location {
   line?: number;
 }
 
+/** What a tool call reports: text (descriptions, output as markdown) or a file diff. */
+export type ToolContent =
+  | { kind: "text"; text: string }
+  | { kind: "diff"; path: string; oldText: string | null; newText: string };
+
 export interface ToolCallInfo {
   id: string;
+  /** The agent's tool name (e.g. Bash, Edit, mcp__harness__show_code), when reported. */
+  name?: string;
+  /** Latest reported content; replaces earlier content when present. */
+  content?: ToolContent[];
   title?: string;
   kind?: string;
   status?: string;
@@ -29,6 +38,8 @@ export interface PermissionOption {
 export interface PermissionRequest {
   title: string;
   kind?: string;
+  /** What the call would do: the command's description, or the diff of an edit. */
+  content?: ToolContent[];
   options: PermissionOption[];
 }
 
@@ -198,6 +209,8 @@ export class AgentSession {
             handlers.onToolCall(
               {
                 id: u.toolCallId,
+                name: toolName(u),
+                content: toContent(u.content),
                 title: u.title,
                 kind: u.kind ?? undefined,
                 status: u.status ?? undefined,
@@ -211,6 +224,8 @@ export class AgentSession {
             handlers.onToolCall(
               {
                 id: u.toolCallId,
+                name: toolName(u),
+                content: toContent(u.content),
                 title: u.title ?? undefined,
                 kind: u.kind ?? undefined,
                 status: u.status ?? undefined,
@@ -229,6 +244,7 @@ export class AgentSession {
           {
             title: toolCall.title ?? "Tool call",
             kind: toolCall.kind ?? undefined,
+            content: toContent(toolCall.content),
             options: options.map((o) => ({ optionId: o.optionId, name: o.name, kind: o.kind })),
           },
           signal,
@@ -325,6 +341,26 @@ export class AgentSession {
     this.child.kill("SIGTERM");
     this.relay.close();
   }
+}
+
+/** Tool content in a front-end friendly form; undefined when the update carries none. */
+function toContent(content: ReadonlyArray<unknown> | null | undefined): ToolContent[] | undefined {
+  if (!content || content.length === 0) return undefined;
+  const out: ToolContent[] = [];
+  for (const raw of content) {
+    const c = raw as { type?: string; content?: { type?: string; text?: string }; path?: string; oldText?: string | null; newText?: string };
+    if (c.type === "content" && c.content?.type === "text" && typeof c.content.text === "string") {
+      out.push({ kind: "text", text: c.content.text });
+    } else if (c.type === "diff" && typeof c.path === "string" && typeof c.newText === "string") {
+      out.push({ kind: "diff", path: c.path, oldText: c.oldText ?? null, newText: c.newText });
+    }
+  }
+  return out;
+}
+
+function toolName(update: unknown): string | undefined {
+  const u = update as { name?: string; _meta?: { claudeCode?: { toolName?: string } } };
+  return u.name ?? u._meta?.claudeCode?.toolName;
 }
 
 function toLocations(locations: ReadonlyArray<{ path: string; line?: number | null }> | null | undefined): Location[] {

@@ -1,6 +1,7 @@
 import MarkdownIt from "markdown-it";
 import type { FromWebview, ToWebview } from "../src/protocol";
 import { renderFigure, type LiveUpdater } from "./figures";
+import { ToolCards, renderToolContent } from "./tools";
 
 declare function acquireVsCodeApi(): { postMessage(message: FromWebview): void };
 const vscode = acquireVsCodeApi();
@@ -61,7 +62,9 @@ let busy = false;
 let agentText = "";
 let agentBubble: HTMLElement | null = null;
 let renderQueued = false;
-const toolRows = new Map<string, HTMLElement>();
+const openDiff = (path: string, oldText: string | null, newText: string) =>
+  vscode.postMessage({ type: "openDiff", path, oldText, newText });
+const tools = new ToolCards(md, openDiff);
 const permissionCards = new Map<string, HTMLElement>();
 const liveCharts = new Map<string, LiveUpdater>();
 /** Rows that arrived before their chart finished rendering. */
@@ -172,7 +175,7 @@ window.addEventListener("message", (event: MessageEvent<ToWebview>) => {
     case "clear":
       endAgentMessage();
       log.replaceChildren();
-      toolRows.clear();
+      tools.clear();
       permissionCards.clear();
       liveCharts.clear();
       earlyRows.clear();
@@ -252,23 +255,22 @@ window.addEventListener("message", (event: MessageEvent<ToWebview>) => {
       }
       break;
     case "tool": {
+      if (m.hidden) break;
       // A tool call splits the reply: text after it starts a new bubble.
       if (!m.isUpdate) endAgentMessage();
-      let row = toolRows.get(m.id);
-      if (!row) {
-        row = div("tool");
-        toolRows.set(m.id, row);
-        append(row);
-      }
-      if (m.title) row.dataset.title = m.title;
-      if (m.status) row.dataset.status = m.status;
-      row.textContent = `${row.dataset.title ?? "tool"}${row.dataset.status ? ` — ${row.dataset.status}` : ""}`;
+      const created = tools.update(m.id, { title: m.title, kind: m.kind, status: m.status, content: m.content });
+      if (created) append(created);
       break;
     }
     case "permission": {
       endAgentMessage();
       const card = div("permission");
       card.appendChild(div("permission-title", `Claude wants to run: ${m.title}${m.kind ? ` (${m.kind})` : ""}`));
+      if (m.content?.length) {
+        const detail = div("permission-detail");
+        renderToolContent(detail, m.content, md, openDiff);
+        card.appendChild(detail);
+      }
       const row = div("permission-buttons");
       for (const o of m.options) {
         const b = document.createElement("button");

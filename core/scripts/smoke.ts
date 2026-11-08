@@ -96,6 +96,9 @@ const session = await AgentSession.start({
       if (voice) say(chunker.push(c));
     },
     onToolCall: (t, isUpdate) => {
+      if (process.env.VH_LOG_CONTENT && t.content?.length) {
+        log("content", `${t.name ?? "?"} ${t.status ?? ""} ${t.content.map((c) => (c.kind === "diff" ? `diff(${path.basename(c.path)})` : `text(${c.text.length})`)).join(", ")}`);
+      }
       if (process.env.VH_LOG_RAW && /explain_code/.test(t.title ?? "")) {
         log("raw", `${isUpdate ? "update" : "announce"} ${t.id.slice(-6)} status=${t.status} input=${JSON.stringify(t.rawInput ?? null).slice(0, 90)}`);
       }
@@ -104,7 +107,7 @@ const session = await AgentSession.start({
     },
     onPermission: async (req) => {
       const allow = /show_code|clear_highlight/.test(req.title) && req.kind !== "execute";
-      log("permission", `${allow ? "ALLOW" : "REJECT"} ${req.title} [${req.kind}]`);
+      log("permission", `${allow ? "ALLOW" : "REJECT"} ${req.title} [${req.kind}]${req.content?.length ? " content: " + req.content.map((c) => c.kind).join(",") : ""}`);
       return req.options.find((o) => o.kind === (allow ? "allow_once" : "reject_once"))?.optionId ?? null;
     },
     onShowCode: async (r) => {

@@ -221,3 +221,40 @@ button.listening {
 .session-item.current { opacity: 0.6; }
 .session-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .session-time { flex-shrink: 0; font-size: 0.85em; color: var(--vscode-descriptionForeground); }
+
+.tool-card {
+  margin: 0 0 6px;
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.tool-card.failed { border-color: var(--vscode-errorForeground); }
+.tool-head {
+  display: flex; width: 100%; gap: 8px; align-items: center;
+  padding: 4px 8px; border-radius: 0; text-align: left; cursor: default;
+  background: transparent; color: var(--vscode-foreground);
+  font-family: var(--vscode-editor-font-family); font-size: 0.85em;
+}
+.tool-head.expandable { cursor: pointer; }
+.tool-head:hover:not(:disabled) { background: var(--vscode-list-hoverBackground); }
+.tool-icon { flex-shrink: 0; width: 1.2em; text-align: center; }
+.tool-title { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tool-status { flex-shrink: 0; color: var(--vscode-descriptionForeground); }
+.tool-status.done { color: var(--vscode-charts-green); }
+.tool-status.failed { color: var(--vscode-errorForeground); }
+.tool-body { border-top: 1px solid var(--vscode-panel-border); padding: 6px 8px; max-height: 360px; overflow: auto; font-size: 0.9em; }
+.tool-body[hidden] { display: none; }
+.tool-text > :first-child { margin-top: 0; }
+.tool-text > :last-child { margin-bottom: 0; }
+.tool-text pre { margin: 0; white-space: pre-wrap; }
+
+.diff { margin: 4px 0; }
+.diff-head { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.diff-file { flex: 1; font-family: var(--vscode-editor-font-family); font-size: 0.9em; }
+.diff-open { padding: 2px 8px; font-size: 0.85em; }
+.diff-lines { margin: 0; font-family: var(--vscode-editor-font-family); font-size: 0.85em; white-space: pre-wrap; border-radius: 4px; overflow: hidden; }
+.diff-line { padding: 0 6px; }
+.diff-line.add { background: var(--vscode-diffEditor-insertedLineBackground, rgba(80, 200, 120, 0.15)); }
+.diff-line.del { background: var(--vscode-diffEditor-removedLineBackground, rgba(230, 80, 80, 0.15)); }
+.diff-line.ctx { color: var(--vscode-descriptionForeground); }
+.permission-detail { margin: 0 0 8px; max-height: 300px; overflow: auto; font-size: 0.9em; }
