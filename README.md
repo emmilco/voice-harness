@@ -33,6 +33,7 @@ Open a folder, then run **Voice Harness: Open Panel** from the command palette. 
 
 | Action | How |
 |---|---|
+| Reply hands-free | With 💬 Conversation on, the mic opens after Claude finishes speaking; pause to send |
 | Talk | `Ctrl+Shift+Space` or 🎙 Talk; press again (■ Send) when done |
 | Discard a recording | ✕ Discard |
 | Stop Claude | Stop |
@@ -44,6 +45,8 @@ Open a folder, then run **Voice Harness: Open Panel** from the command palette. 
 |---|---|---|
 | `voiceHarness.voice` | `af_heart` | Kokoro voice. Hear them all with `node tools/voice-sampler/server.mjs`, then open http://127.0.0.1:4317 |
 | `voiceHarness.speakReplies` | `true` | Speak replies when the panel opens |
+| `voiceHarness.conversationMode` | `true` | After a spoken reply, listen for your answer; a pause (about 1.7 s, longer mid-sentence) ends it |
+| `voiceHarness.sendEditorContext` | `true` | Send the open file, cursor and selection with each message |
 | `voiceHarness.autoInterrupt` | `false` | Pause speech automatically when you start talking over it |
 | `voiceHarness.echoCancellation` | `false` | macOS echo cancellation, for use with speakers instead of headphones |
 | `voiceHarness.modelsDirectory` | *(empty)* | Where speech models live; empty means `~/Library/Application Support/voice-harness/models` |

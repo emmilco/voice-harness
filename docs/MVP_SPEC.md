@@ -98,6 +98,7 @@ Passed to the agent at session start. All are **display-only** — they change w
 
 ### 4.4 Turn-taking
 
+- **Conversation mode (as built, default on).** After a turn ends normally and its speech has finished, the mic opens automatically. Voice activity detection reports speech start/end during the turn; `AutoTurnEnder` (core) ends it after ~1.7 s of silence, ~3.2 s if the words so far end mid-thought (trailing comma or a continuation word), and closes the mic quietly if no speech starts within 8 s. Turns started with Talk still end with Send.
 - **Start cue:** listening starts with an audible tone and a visible "listening" indicator in the panel (M0b showed that without a cue, speech is lost before the user knows recording began).
 - **Your turn:** a VS Code keybinding toggles listening on/off (tap to start, tap to stop). VS Code keybindings fire on key *press* only, so true hold-to-talk isn't available inside VS Code; a global hold-to-talk hotkey in the voice process is a possible later upgrade.
 - **Automatic interruption is off by default (Elliot, after M4).** With key-ended turns, pressing Talk already stops speech; automatic pausing mostly added false pauses (coughs, room speech). It remains available as the setting `voiceHarness.autoInterrupt`, which loads the voice-activity model only when on.

@@ -73,7 +73,7 @@ do {
 phase("kokoro initialize")
 
 var vad: VadManager?
-if micAvailable && wantInterruptions {
+if micAvailable {
     do {
         vad = try await VadManager(modelDirectory: modelsDirectory)
     } catch {
@@ -83,7 +83,8 @@ if micAvailable && wantInterruptions {
 }
 
 let speaker = Speaker(kokoro: kokoro, voice: voice, audio: audio)
-let controller = Controller(audio: audio, speaker: speaker, vad: vad, locale: locale, defaultVoice: voice)
+let controller = Controller(audio: audio, speaker: speaker, vad: vad, locale: locale, defaultVoice: voice,
+                            interruptions: wantInterruptions)
 audio.onDeviceChange = { result in
     switch result {
     case .success(let (input, output)):
@@ -109,7 +110,8 @@ stdinReader.start()
 Events.emit("ready", [
     "voice": voice,
     "microphone": micAvailable,
-    "interruptions": vad != nil,
+    "interruptions": vad != nil && wantInterruptions,
+    "speechDetection": vad != nil,
     "voiceProcessing": voiceProcessing,
     "inputDevice": audio.deviceNames.input,
     "outputDevice": audio.deviceNames.output,

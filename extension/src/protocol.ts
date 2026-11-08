@@ -6,7 +6,7 @@ export type VoiceUiState = "loading" | "idle" | "warming" | "listening" | "speak
 
 export type ToWebview =
   | { type: "state"; state: SessionState; detail?: string }
-  | { type: "voice"; state: VoiceUiState; speak: boolean; microphone: boolean; detail?: string }
+  | { type: "voice"; state: VoiceUiState; speak: boolean; microphone: boolean; conversation: boolean; autoListening: boolean; detail?: string }
   | { type: "partial"; text: string; source: "user" | "interruption" | null }
   | { type: "level"; db: number }
   | { type: "user"; text: string; spoken: boolean; context?: string }
@@ -30,6 +30,7 @@ export type FromWebview =
   | { type: "restart" }
   | { type: "talk" }
   | { type: "toggleSpeak" }
+  | { type: "toggleConversation" }
   | { type: "permission"; requestId: string; optionId: string | null }
   | { type: "figureResult"; id: string; ok: boolean; error?: string }
   | { type: "listSessions" }

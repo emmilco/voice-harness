@@ -7,6 +7,7 @@ export { SpeechChunker, cleanMarkdown, splitSentences } from "./speechText";
 export { editorContextLabel, formatEditorContext, type EditorContext } from "./editorContext";
 export { parseDataFile, type Row } from "./dataFile";
 export { RestartPolicy } from "./restartPolicy";
+export { AutoTurnEnder, DEFAULT_AUTO_TURN, endsMidThought, type AutoTurnTimings } from "./autoTurn";
 export { StepSequencer } from "./stepSequencer";
 export { classifyInterruption, type InterruptionAction } from "./turnPolicy";
 export { VoiceClient, type VoiceClientOptions, type VoiceEvent } from "./voiceClient";

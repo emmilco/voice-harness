@@ -71,6 +71,11 @@
           "type": "boolean",
           "default": true,
           "description": "Send the open file, visible lines, cursor line and selection with each message, so \"this\" and \"here\" refer to what you're looking at."
+        },
+        "voiceHarness.conversationMode": {
+          "type": "boolean",
+          "default": true,
+          "description": "After Claude finishes a spoken reply, open the microphone for your answer; a pause ends your turn. Turns you start with Talk still end with Send."
         }
       }
     },

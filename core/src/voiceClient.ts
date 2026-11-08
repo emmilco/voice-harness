@@ -26,6 +26,8 @@ export type VoiceEvent =
   | { event: "voices"; voices: string[] }
   | { event: "micWarming" }
   | { event: "listening" }
+  | { event: "speechStart" }
+  | { event: "speechEnd" }
   | { event: "partial"; text: string; source: "user" | "interruption" }
   | { event: "transcript"; text: string }
   | { event: "bargeIn" }

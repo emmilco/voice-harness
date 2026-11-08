@@ -6,6 +6,8 @@ import Foundation
 ///
 /// - User turn (`listenStart` … `listenStop`): microphone audio goes to a live
 ///   transcription; `partial` events carry the running text, `transcript` the result.
+///   Voice activity detection reports `speechStart` / `speechEnd` during the turn, so the
+///   harness can end it on a pause.
 /// - While speech plays and no user turn is open, voice activity detection watches
 ///   the microphone. On detected speech, playback pauses at once (`bargeIn`) and the
 ///   interruption is transcribed until the speaker falls silent (`interruption`).
@@ -21,6 +23,7 @@ actor Controller {
     private let vad: VadManager?
     private let locale: Locale
     private let defaultVoice: String
+    private let interruptions: Bool
     private var segmentation: VadSegmentationConfig
 
     private var mode = Mode.idle
@@ -35,8 +38,9 @@ actor Controller {
     private var levelPeak: Float = 0
     private var lastLevelEmit = Date.distantPast
 
-    init(audio: AudioIO, speaker: Speaker, vad: VadManager?, locale: Locale, defaultVoice: String) {
+    init(audio: AudioIO, speaker: Speaker, vad: VadManager?, locale: Locale, defaultVoice: String, interruptions: Bool) {
         self.defaultVoice = defaultVoice
+        self.interruptions = interruptions
         self.audio = audio
         self.speaker = speaker
         self.vad = vad
@@ -110,6 +114,7 @@ actor Controller {
         audio.playStartTone()
         try? await Task.sleep(for: .seconds(AudioIO.toneDuration + 0.05))
         mode = .listening
+        resetVad()
         _ = audio.takeStats()
         transcription = beginTranscription(source: "user", preroll: false)
         Events.emit("listening")
@@ -165,6 +170,7 @@ actor Controller {
         switch mode {
         case .listening:
             transcription?.feed(buffer)
+            await runVad(buffer)
         case .interrupting:
             transcription?.feed(buffer)
             await runVad(buffer)
@@ -172,7 +178,7 @@ actor Controller {
         case .idle:
             let speaking = await speaker.isActive
             let paused = await speaker.paused
-            if speaking && !paused {
+            if interruptions && speaking && !paused {
                 await runVad(buffer)
             } else if vadRunning {
                 resetVad()
@@ -211,11 +217,16 @@ actor Controller {
             guard let result = try? await vad.processStreamingChunk(chunk, state: vadState, config: segmentation) else { continue }
             vadState = result.state
             guard let event = result.event else { continue }
-            if event.isStart, mode == .idle {
+            switch mode {
+            case .listening:
+                Events.emit(event.isStart ? "speechStart" : "speechEnd")
+            case .idle where event.isStart:
                 await beginInterruption()
-            } else if event.isEnd, mode == .interrupting {
+            case .interrupting where event.isEnd:
                 await endInterruption()
                 return
+            default:
+                break
             }
         }
     }

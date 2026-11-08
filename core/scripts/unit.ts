@@ -1,6 +1,6 @@
 // Unit tests for the pure speech logic: `npm run unit -w core`.
 import assert from "node:assert/strict";
-import { RestartPolicy, SpeechChunker, StepSequencer, parseDataFile, classifyInterruption, editorContextLabel, formatEditorContext } from "../src/index";
+import { AutoTurnEnder, endsMidThought, RestartPolicy, SpeechChunker, StepSequencer, parseDataFile, classifyInterruption, editorContextLabel, formatEditorContext } from "../src/index";
 
 function speakAll(chunks: string[]): string[] {
   const c = new SpeechChunker();
@@ -129,13 +129,61 @@ const cases: [string, () => void][] = [
     p.reset();
     assert.equal(p.next(131_000), 1000);
   }],
+  ["mid-thought endings", () => {
+    for (const t of ["so I was wondering, and", "why do we divide by the", "um", "it computes the loss,"]) assert.equal(endsMidThought(t), true, t);
+    for (const t of ["what does this do?", "Go on.", "explain the mask", ""]) assert.equal(endsMidThought(t), false, t);
+  }],
   ["interruption policy", () => {
     for (const t of ["", "mm-hmm", "Yeah.", "okay okay", "Go on.", "uh huh", "Got it", "right"]) assert.equal(classifyInterruption(t), "resume", t);
     for (const t of ["wait, why the square root?", "stop", "no, the other file", "yeah but what about the mask"]) assert.equal(classifyInterruption(t), "newTurn", t);
   }],
 ];
 
+const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+const timings = { pauseMs: 40, midThoughtPauseMs: 120, noSpeechMs: 200 };
+
 const asyncCases: [string, () => Promise<void>][] = [
+  ["auto turn: ends after a pause", async () => {
+    const events: string[] = [];
+    const t = new AutoTurnEnder(() => events.push("end"), () => events.push("give up"), timings);
+    t.start();
+    t.speechStart();
+    t.partialText("what does this do?");
+    t.speechEnd();
+    await wait(70);
+    assert.deepEqual(events, ["end"]);
+  }],
+  ["auto turn: speaking again cancels the pause", async () => {
+    const events: string[] = [];
+    const t = new AutoTurnEnder(() => events.push("end"), () => events.push("give up"), timings);
+    t.start();
+    t.speechStart();
+    t.speechEnd();
+    await wait(20);
+    t.speechStart();
+    await wait(60);
+    assert.deepEqual(events, []);
+    t.stop();
+  }],
+  ["auto turn: waits longer mid-thought", async () => {
+    const events: string[] = [];
+    const t = new AutoTurnEnder(() => events.push("end"), () => events.push("give up"), timings);
+    t.start();
+    t.speechStart();
+    t.partialText("so the reason we do this is because");
+    t.speechEnd();
+    await wait(70);
+    assert.deepEqual(events, []);
+    await wait(80);
+    assert.deepEqual(events, ["end"]);
+  }],
+  ["auto turn: gives up without speech", async () => {
+    const events: string[] = [];
+    const t = new AutoTurnEnder(() => events.push("end"), () => events.push("give up"), timings);
+    t.start();
+    await wait(230);
+    assert.deepEqual(events, ["give up"]);
+  }],
   ["held steps released in order after the wait", async () => {
     const out: string[] = [];
     const seq = new StepSequencer<string>((s) => out.push(s), 50);

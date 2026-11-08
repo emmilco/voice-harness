@@ -7,6 +7,7 @@ import {
   AgentSession,
   BillingGuardError,
   SPEECH_LAYER,
+  AutoTurnEnder,
   RestartPolicy,
   SpeechChunker,
   StepSequencer,
@@ -46,6 +47,16 @@ export class HarnessPanel implements vscode.Disposable {
   private speakReplies: boolean;
   private readonly chunker = new SpeechChunker();
   private readonly voiceRestarts = new RestartPolicy();
+  /** Conversation mode: after Claude finishes, listen for a reply that ends on a pause. */
+  private conversation: boolean;
+  /** A finished agent turn whose spoken reply hasn't been answered yet. */
+  private awaitingReply = false;
+  /** Speech queued and not yet finished; auto-listening waits for it so the reply isn't cut off. */
+  private speechPending = false;
+  private readonly autoTurn = new AutoTurnEnder(
+    () => this.voice?.listenStop(),
+    () => this.voice?.listenCancel(),
+  );
   private readonly steps = new StepSequencer<ExplainStep>((step) => this.presentStep(step));
   /** True while a loaded session's history is replayed: shown, not spoken, no editor effects. */
   private replaying = false;
@@ -113,6 +124,7 @@ export class HarnessPanel implements vscode.Disposable {
     this.editor = new EditorControl(workspace);
     this.tracker = new EditorTracker(workspace);
     this.speakReplies = vscode.workspace.getConfiguration("voiceHarness").get<boolean>("speakReplies", true);
+    this.conversation = vscode.workspace.getConfiguration("voiceHarness").get<boolean>("conversationMode", true);
     panel.webview.html = this.html();
     panel.webview.onDidReceiveMessage((m: FromWebview) => this.onMessage(m));
     panel.onDidDispose(() => this.dispose());
@@ -139,6 +151,14 @@ export class HarnessPanel implements vscode.Disposable {
         break;
       case "talk":
         this.talk();
+        break;
+      case "toggleConversation":
+        this.conversation = !this.conversation;
+        if (!this.conversation) {
+          this.awaitingReply = false;
+          if (this.autoTurn.running) this.cancelListening();
+        }
+        this.postVoice();
         break;
       case "toggleSpeak":
         this.speakReplies = !this.speakReplies;
@@ -293,6 +313,8 @@ export class HarnessPanel implements vscode.Disposable {
   /** Starts a user turn, cancelling (and silencing) any turn still running. */
   private async send(text: string, spoken: boolean): Promise<void> {
     if (!this.session) return;
+    this.awaitingReply = false;
+    if (this.autoTurn.running) this.cancelListening();
     this.silence();
     if (this.turn) {
       this.session.cancel();
@@ -315,6 +337,11 @@ export class HarnessPanel implements vscode.Disposable {
         const stopReason = await session.prompt(prompt);
         this.speak(this.chunker.flush());
         this.post({ type: "turnEnd", stopReason });
+        if (stopReason === "end_turn" && !this.suppressSpeech) {
+          this.awaitingReply = true;
+          // With no speech in flight, listen now; otherwise speechIdle starts it.
+          if (!this.speechPending) setTimeout(() => this.maybeListenForReply(), 0);
+        }
       } catch (err) {
         this.post({ type: "error", text: (err as Error).message });
       } finally {
@@ -327,9 +354,24 @@ export class HarnessPanel implements vscode.Disposable {
   }
 
   private stopEverything(): void {
+    this.awaitingReply = false;
     this.silence();
-    if (this.voiceState === "listening") this.voice?.listenCancel();
+    if (this.voiceState === "listening" || this.voiceState === "warming") this.cancelListening();
     this.session?.cancel();
+  }
+
+  private cancelListening(): void {
+    this.autoTurn.stop();
+    this.voice?.listenCancel();
+  }
+
+  /** In conversation mode, opens the mic for the user's reply once Claude has finished speaking. */
+  private maybeListenForReply(): void {
+    if (!this.conversation || !this.awaitingReply || this.turn || !this.voice || !this.microphone) return;
+    if (this.voiceState !== "idle") return;
+    this.awaitingReply = false;
+    this.autoTurn.start();
+    this.voice.listenStart();
   }
 
   // MARK: Voice
@@ -355,6 +397,8 @@ export class HarnessPanel implements vscode.Disposable {
         this.voice = undefined;
         this.pendingMarks.clear();
         this.chunker.reset();
+        this.speechPending = false;
+        this.autoTurn.stop();
         this.output.appendLine(reason);
         if (this.disposed) return;
         const delay = this.voiceRestarts.next();
@@ -404,7 +448,15 @@ export class HarnessPanel implements vscode.Disposable {
         if (this.voiceState !== "listening") this.setVoice("speaking");
         break;
       case "speechIdle":
+        this.speechPending = false;
         if (this.voiceState === "speaking") this.setVoice("idle");
+        if (!this.turn) this.maybeListenForReply();
+        break;
+      case "speechStart":
+        this.autoTurn.speechStart();
+        break;
+      case "speechEnd":
+        this.autoTurn.speechEnd();
         break;
       case "micWarming":
         this.setVoice("warming", this.inputDevice ? `mic: ${this.inputDevice}` : undefined);
@@ -413,15 +465,18 @@ export class HarnessPanel implements vscode.Disposable {
         this.setVoice("listening", this.inputDevice ? `mic: ${this.inputDevice}` : undefined);
         break;
       case "partial":
+        if (e.source === "user") this.autoTurn.partialText(e.text);
         this.post({ type: "partial", text: e.text, source: e.source });
         break;
       case "transcript":
+        this.autoTurn.stop();
         this.setVoice("idle", this.inputDevice ? `mic: ${this.inputDevice}` : undefined);
         this.post({ type: "partial", text: "", source: null });
         if (e.text) void this.send(e.text, true);
         else this.post({ type: "notice", text: "Didn't catch anything." });
         break;
       case "listenCancelled":
+        this.autoTurn.stop();
         this.setVoice("idle");
         this.post({ type: "partial", text: "", source: null });
         break;
@@ -474,9 +529,11 @@ export class HarnessPanel implements vscode.Disposable {
       return;
     }
     if (this.voiceState === "listening") {
+      this.autoTurn.stop();
       this.voice.listenStop();
       return;
     }
+    this.awaitingReply = false;
     if (this.voiceState === "warming") return;
     // Whatever the agent says next belongs to the turn being replaced.
     this.silence();
@@ -514,11 +571,13 @@ export class HarnessPanel implements vscode.Disposable {
   private speak(sentences: string[]): void {
     if (!this.voice || !this.speakReplies || this.suppressSpeech) return;
     for (const s of sentences) this.voice.speak(s);
+    if (sentences.length) this.speechPending = true;
   }
 
   /** Stops speech now and drops speech for the rest of the current turn. */
   private silence(): void {
     this.suppressSpeech = true;
+    this.speechPending = false;
     this.pendingMarks.clear();
     this.steps.reset();
     this.chunker.reset();
@@ -532,7 +591,15 @@ export class HarnessPanel implements vscode.Disposable {
   }
 
   private postVoice(): void {
-    this.post({ type: "voice", state: this.voiceState, speak: this.speakReplies, microphone: this.microphone, detail: this.voiceDetail });
+    this.post({
+      type: "voice",
+      state: this.voiceState,
+      speak: this.speakReplies,
+      microphone: this.microphone,
+      conversation: this.conversation,
+      autoListening: this.autoTurn.running,
+      detail: this.voiceDetail,
+    });
   }
 
   // MARK: Figures
@@ -693,6 +760,7 @@ export class HarnessPanel implements vscode.Disposable {
     <button id="stop" class="secondary">Stop</button>
     <span class="spacer"></span>
     <button id="sessions" class="secondary" title="Past conversations in this folder">☰ Sessions</button>
+    <button id="conversation" class="secondary" title="After Claude replies, listen for your answer; a pause ends it">💬 Conversation on</button>
     <button id="speak" class="secondary" title="Speak Claude's replies">🔊 Voice on</button>
     <button id="restart" class="secondary">Restart</button>
   </div>

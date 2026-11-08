@@ -54,6 +54,7 @@ let voiceText = "";
 const meter = document.createElement("span");
 meter.className = "meter";
 let listening = false;
+let autoListening = false;
 
 let ready = false;
 let busy = false;
@@ -142,8 +143,12 @@ window.addEventListener("message", (event: MessageEvent<ToWebview>) => {
     case "voice":
       voiceUsable = m.microphone && m.state !== "loading" && m.state !== "unavailable";
       listening = m.state === "listening";
+      autoListening = m.autoListening;
+      document.getElementById("conversation")!.textContent = m.conversation ? "💬 Conversation on" : "💬 Conversation off";
       voiceChip.className = `voice ${m.state}`;
-      voiceText = (VOICE_LABELS[m.state] ?? m.state) + (m.detail ? ` — ${m.detail}` : "");
+      voiceText =
+        (m.state === "listening" && autoListening ? "● Listening for your reply — pause to send" : (VOICE_LABELS[m.state] ?? m.state)) +
+        (m.detail ? ` — ${m.detail}` : "");
       voiceChip.textContent = voiceText;
       meter.textContent = "";
       if (m.state === "listening" || m.state === "interrupted") voiceChip.appendChild(meter);
@@ -320,6 +325,7 @@ document.getElementById("session-new")!.addEventListener("click", () => {
   vscode.postMessage({ type: "newSession" });
 });
 speakButton.addEventListener("click", () => vscode.postMessage({ type: "toggleSpeak" }));
+document.getElementById("conversation")!.addEventListener("click", () => vscode.postMessage({ type: "toggleConversation" }));
 restartButton.addEventListener("click", () => {
   endAgentMessage();
   append(div("notice", "Restarting session…"));
