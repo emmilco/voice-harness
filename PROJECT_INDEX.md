@@ -20,6 +20,8 @@ voice-harness/
 │   │   ├── relay.ts         # Unix-socket relay from the MCP server to the front end
 │   │   ├── mcpServer.ts     # stdio MCP server: show_code, explain_code, clear_highlight, show_figure (bundled to extension/dist)
 │   │   ├── stepSequencer.ts # delivers numbered explain_code steps in order
+│   │   ├── editorContext.ts # <editor-context> block sent with each turn
+│   │   ├── dataFile.ts      # parses .jsonl/.csv metrics files for live charts
 │   │   ├── speechLayer.ts   # system-prompt text appended to Claude Code's standard prompt
 │   │   ├── speechText.ts    # SpeechChunker: streamed markdown → speakable sentences (skips fences, tables)
 │   │   ├── turnPolicy.ts    # classifyInterruption: resume vs new turn
@@ -35,6 +37,7 @@ voice-harness/
 │   │   ├── extension.ts     # activation, commands
 │   │   ├── panel.ts         # chat panel: owns the session, permissions, webview HTML/CSP
 │   │   ├── editorControl.ts # show_code highlight and follow-along reveal
+│   │   ├── editorTracker.ts # remembers the user's last file editor for editor context
 │   │   ├── protocol.ts      # extension ↔ webview message types
 │   │   └── toolchain.ts     # resolves node / claude via settings or a login shell
 │   └── webview/       # main.ts (chat UI, markdown-it, `onscreen` blocks), figures.ts (Vega-Lite, Mermaid, SVG, images), style.css
@@ -47,6 +50,7 @@ voice-harness/
 │       ├── LiveTranscription.swift # one live SpeechAnalyzer utterance
 │       └── Controller.swift    # listen / speak / interrupt state machine
 ├── tools/
+│   ├── fake-training.mjs # appends a falling loss to a .jsonl file, for trying live charts
 │   └── voice-sampler/ # local page for hearing every English Kokoro voice: `node tools/voice-sampler/server.mjs` → http://127.0.0.1:4317
 ├── docs/              # specs and design documents
 │   └── MVP_SPEC.md    # MVP scope, architecture, build order, open questions

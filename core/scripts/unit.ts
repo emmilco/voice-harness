@@ -1,6 +1,6 @@
 // Unit tests for the pure speech logic: `npm run unit -w core`.
 import assert from "node:assert/strict";
-import { SpeechChunker, StepSequencer, classifyInterruption, editorContextLabel, formatEditorContext } from "../src/index";
+import { SpeechChunker, StepSequencer, parseDataFile, classifyInterruption, editorContextLabel, formatEditorContext } from "../src/index";
 
 function speakAll(chunks: string[]): string[] {
   const c = new SpeechChunker();
@@ -97,6 +97,24 @@ const cases: [string, () => void][] = [
     assert.equal(editorContextLabel(ctx), "a.md:2-3");
     const long = formatEditorContext({ file: "b", cursorLine: 1, selection: { start: 1, end: 900, text: "x".repeat(5000) } });
     assert.ok(long.includes("(selection truncated)") && long.length < 4300);
+  }],
+  ["data file: JSON Lines with a half-written last line", () => {
+    assert.deepEqual(parseDataFile("loss.jsonl", '{"step":1,"loss":4.1}\n\n{"step":2,"loss":3.7}\n{"step":3,"lo'), [
+      { step: 1, loss: 4.1 },
+      { step: 2, loss: 3.7 },
+    ]);
+  }],
+  ["data file: CSV with numbers, quotes and a short row", () => {
+    assert.deepEqual(parseDataFile("m.csv", 'step,loss,note\n1,4.10,"warm, up"\n2,3.7,ok\n3,2.9\n'), [
+      { step: 1, loss: 4.1, note: "warm, up" },
+      { step: 2, loss: 3.7, note: "ok" },
+    ]);
+  }],
+  ["data file: keeps only the last 5000 rows", () => {
+    const text = Array.from({ length: 6000 }, (_, i) => JSON.stringify({ step: i })).join("\n");
+    const rows = parseDataFile("big.jsonl", text);
+    assert.equal(rows.length, 5000);
+    assert.deepEqual(rows[0], { step: 1000 });
   }],
   ["interruption policy", () => {
     for (const t of ["", "mm-hmm", "Yeah.", "okay okay", "Go on.", "uh huh", "Got it", "right"]) assert.equal(classifyInterruption(t), "resume", t);

@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, realpathSync, statSync } from "node:fs";
+import { closeSync, existsSync, mkdirSync, openSync, readFileSync, readSync, realpathSync, statSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import * as vscode from "vscode";
@@ -13,8 +13,10 @@ import {
   classifyInterruption,
   editorContextLabel,
   formatEditorContext,
+  parseDataFile,
   type ExplainStep,
   type Figure,
+  type LiveChart,
   type PermissionRequest,
   type VoiceEvent,
 } from "@voice-harness/core";
@@ -48,6 +50,8 @@ export class HarnessPanel implements vscode.Disposable {
   private turn: Promise<void> | null = null;
   private readonly pendingPermissions = new Map<string, (optionId: string | null) => void>();
   private readonly pendingFigures = new Map<string, (result: { ok: boolean; error?: string }) => void>();
+  /** Live charts following their data files, oldest first. */
+  private readonly liveCharts = new Map<string, ReturnType<typeof setInterval>>();
   /** Editor effects waiting for speech to reach their place, keyed by voice marker id. */
   private readonly pendingMarks = new Map<number, () => void>();
   private readonly editor: EditorControl;
@@ -185,6 +189,7 @@ export class HarnessPanel implements vscode.Disposable {
           onExplainCode: async (step) => this.steps.push(step, step.step),
           onClearHighlight: async () => this.inStepWithSpeech(() => this.editor.clearHighlight()),
           onShowFigure: (figure) => this.showFigure(figure),
+          onShowLiveChart: (chart) => this.showLiveChart(chart),
           onLog: (line) => this.output.appendLine(line),
           onExit: (reason) => {
             this.session = undefined;
@@ -447,14 +452,71 @@ export class HarnessPanel implements vscode.Disposable {
   };
   private static readonly MAX_IMAGE_BYTES = 15 * 1024 * 1024;
 
-  /** Sends a figure to the webview and waits (up to 10 s) for it to report whether it rendered. */
+  private static readonly MAX_LIVE_CHARTS = 3;
+  private static readonly MAX_LIVE_READ_BYTES = 4 * 1024 * 1024;
+
+  private async showLiveChart(chart: LiveChart): Promise<{ ok: true } | { ok: false; error: string }> {
+    const { id, result } = await this.sendFigure({ kind: "vega-lite", content: chart.spec, caption: chart.caption }, true);
+    if (result.ok) this.followDataFile(id, chart.dataFile);
+    return result;
+  }
+
+  /** Re-reads the data file whenever its size or modification time changes, about once a second. */
+  private followDataFile(id: string, file: string): void {
+    if (this.liveCharts.size >= HarnessPanel.MAX_LIVE_CHARTS) {
+      const [oldest, timer] = this.liveCharts.entries().next().value!;
+      clearInterval(timer);
+      this.liveCharts.delete(oldest);
+    }
+    let lastSeen = "";
+    const tick = () => {
+      let seen = "missing";
+      try {
+        const st = statSync(file);
+        seen = `${st.size}:${st.mtimeMs}`;
+      } catch {
+        // not written yet
+      }
+      if (seen === lastSeen || seen === "missing") return;
+      lastSeen = seen;
+      try {
+        this.post({ type: "figureData", id, rows: parseDataFile(file, HarnessPanel.readTail(file)) });
+      } catch (err) {
+        this.output.appendLine(`live chart: could not read ${file}: ${(err as Error).message}`);
+      }
+    };
+    tick();
+    this.liveCharts.set(id, setInterval(tick, 1000));
+  }
+
+  /** The file's text, or only its last few megabytes (from a line start) when it is large. */
+  private static readTail(file: string): string {
+    const size = statSync(file).size;
+    if (size <= HarnessPanel.MAX_LIVE_READ_BYTES) return readFileSync(file, "utf8");
+    const fd = openSync(file, "r");
+    try {
+      const buffer = Buffer.alloc(HarnessPanel.MAX_LIVE_READ_BYTES);
+      readSync(fd, buffer, 0, buffer.length, size - buffer.length);
+      const text = buffer.toString("utf8");
+      return text.slice(text.indexOf("\n") + 1);
+    } finally {
+      closeSync(fd);
+    }
+  }
+
   private async showFigure(figure: Figure): Promise<{ ok: true } | { ok: false; error: string }> {
+    return (await this.sendFigure(figure, false)).result;
+  }
+
+  /** Sends a figure to the webview and waits (up to 10 s) for it to report whether it rendered. */
+  private async sendFigure(figure: Figure, live: boolean): Promise<{ id: string; result: { ok: true } | { ok: false; error: string } }> {
     let content = figure.content;
     if (figure.kind === "image") {
       const type = HarnessPanel.IMAGE_TYPES[path.extname(figure.content).toLowerCase()];
-      if (!type) return { ok: false, error: "unsupported image type" };
-      if (!existsSync(figure.content)) return { ok: false, error: `no such file: ${figure.content}` };
-      if (statSync(figure.content).size > HarnessPanel.MAX_IMAGE_BYTES) return { ok: false, error: "image is larger than 15 MB" };
+      const fail = (error: string) => ({ id: "", result: { ok: false as const, error } });
+      if (!type) return fail("unsupported image type");
+      if (!existsSync(figure.content)) return fail(`no such file: ${figure.content}`);
+      if (statSync(figure.content).size > HarnessPanel.MAX_IMAGE_BYTES) return fail("image is larger than 15 MB");
       content = `data:${type};base64,${readFileSync(figure.content).toString("base64")}`;
     }
     const id = randomBytes(8).toString("hex");
@@ -465,9 +527,9 @@ export class HarnessPanel implements vscode.Disposable {
       };
       this.pendingFigures.set(id, finish);
       setTimeout(() => finish({ ok: false, error: "the panel did not report rendering within 10 s" }), 10_000);
-      this.post({ type: "figure", id, kind: figure.kind, content, caption: figure.caption });
+      this.post({ type: "figure", id, kind: figure.kind, content, caption: figure.caption, live });
     });
-    return result.ok ? { ok: true } : { ok: false, error: result.error ?? "rendering failed" };
+    return { id, result: result.ok ? { ok: true } : { ok: false, error: result.error ?? "rendering failed" } };
   }
 
   // MARK: Permissions
@@ -546,6 +608,8 @@ export class HarnessPanel implements vscode.Disposable {
     HarnessPanel.current = undefined;
     this.resolveAllPermissions();
     for (const finish of [...this.pendingFigures.values()]) finish({ ok: false, error: "the panel was closed" });
+    for (const timer of this.liveCharts.values()) clearInterval(timer);
+    this.liveCharts.clear();
     this.session?.dispose();
     this.voice?.dispose();
     this.editor.dispose();

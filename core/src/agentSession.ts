@@ -45,6 +45,14 @@ export interface CodeRange {
   endLine: number;
 }
 
+/** A Vega-Lite chart whose dataset named "live" follows a metrics file as it grows. */
+export interface LiveChart {
+  spec: string;
+  /** Absolute path inside the workspace; may not exist yet. */
+  dataFile: string;
+  caption?: string;
+}
+
 /** One step of a walkthrough: a small range of code and the words that go with it. */
 export interface ExplainStep {
   range: CodeRange;
@@ -66,6 +74,8 @@ export interface SessionHandlers {
   onClearHighlight(): Promise<void>;
   /** Render a figure; resolve with an error message if it could not be rendered. */
   onShowFigure(figure: Figure): Promise<{ ok: true } | { ok: false; error: string }>;
+  /** Render a live chart and keep its data in step with the file; resolve with an error if it cannot render. */
+  onShowLiveChart(chart: LiveChart): Promise<{ ok: true } | { ok: false; error: string }>;
   onLog(line: string): void;
   /** The agent process ended. */
   onExit(reason: string): void;
@@ -126,6 +136,8 @@ export class AgentSession {
           return { ok: true };
         case "show_figure":
           return handlers.onShowFigure({ kind: req.kind, content: req.content, caption: req.caption });
+        case "show_live_chart":
+          return handlers.onShowLiveChart({ spec: req.spec, dataFile: req.data_file, caption: req.caption });
         case "explain_code":
           await handlers.onExplainCode({
             range: { path: req.path, startLine: req.start_line, endLine: req.end_line },

@@ -9,6 +9,9 @@ const dark = () => document.body.classList.contains("vscode-dark") || document.b
 let mermaidReady = false;
 let mermaidCount = 0;
 
+/** For a live chart: replaces the rows of its "live" dataset. */
+export type LiveUpdater = (rows: Record<string, unknown>[]) => Promise<void>;
+
 /**
  * Renders one figure into `target`. Throws with a readable message when the
  * figure cannot be rendered; the caller reports it back to the agent.
@@ -18,8 +21,10 @@ let mermaidCount = 0;
  * - mermaid: strict security level (labels sanitized, no click handlers).
  * - svg: shown as an <img>, where embedded scripts cannot run.
  * - image: `content` is a data: URI prepared by the extension.
+ *
+ * Returns an updater for Vega-Lite charts (used by live charts).
  */
-export async function renderFigure(target: HTMLElement, kind: FigureKind, content: string): Promise<void> {
+export async function renderFigure(target: HTMLElement, kind: FigureKind, content: string): Promise<LiveUpdater | undefined> {
   switch (kind) {
     case "vega-lite": {
       let spec: unknown;
@@ -28,7 +33,7 @@ export async function renderFigure(target: HTMLElement, kind: FigureKind, conten
       } catch (err) {
         throw new Error(`content is not valid JSON: ${(err as Error).message}`);
       }
-      await vegaEmbed(target, spec as never, {
+      const embedded = await vegaEmbed(target, spec as never, {
         actions: false,
         renderer: "svg",
         ast: true,
@@ -36,7 +41,9 @@ export async function renderFigure(target: HTMLElement, kind: FigureKind, conten
         theme: dark() ? "dark" : undefined,
         config: { background: "transparent" },
       });
-      return;
+      return async (rows) => {
+        await embedded.view.data("live", rows).runAsync();
+      };
     }
     case "mermaid": {
       if (!mermaidReady) {
@@ -45,7 +52,7 @@ export async function renderFigure(target: HTMLElement, kind: FigureKind, conten
       }
       const { svg } = await mermaid.render(`mermaid-${++mermaidCount}`, content);
       target.innerHTML = svg;
-      return;
+      return undefined;
     }
     case "svg": {
       if (!/^\s*(<\?xml[^>]*>\s*)?<svg[\s>]/.test(content)) throw new Error("content is not an <svg> document");
@@ -53,11 +60,11 @@ export async function renderFigure(target: HTMLElement, kind: FigureKind, conten
       let binary = "";
       for (const b of bytes) binary += String.fromCharCode(b);
       await showImage(target, `data:image/svg+xml;base64,${btoa(binary)}`);
-      return;
+      return undefined;
     }
     case "image":
       await showImage(target, content);
-      return;
+      return undefined;
   }
 }
 

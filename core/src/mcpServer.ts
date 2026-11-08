@@ -128,6 +128,41 @@ server.registerTool(
 );
 
 server.registerTool(
+  "show_live_chart",
+  {
+    description:
+      "Show a chart that keeps updating as a data file grows, e.g. a training loss curve while a run is in progress. " +
+      "spec is a Vega-Lite JSON spec whose top-level data is exactly {\"name\": \"live\"}; data_file is a workspace file the run " +
+      "appends to: JSON Lines (.jsonl, one object per line) or CSV with a header row. The file may not exist yet. " +
+      "The panel re-reads it about once a second (last 5000 rows) and updates the chart in place. Display-only.",
+    inputSchema: {
+      spec: z.string().describe('Vega-Lite JSON spec with "data": {"name": "live"}'),
+      data_file: z.string().describe("Path of the .jsonl/.ndjson or .csv file, absolute or relative to the workspace root"),
+      caption: z.string().optional().describe("One short line shown under the chart"),
+    },
+  },
+  async ({ spec, data_file, caption }) => {
+    const resolved = path.resolve(WORKSPACE, data_file);
+    if (!resolved.startsWith(WORKSPACE + path.sep)) {
+      return { isError: true, content: [{ type: "text" as const, text: "data_file is outside the workspace." }] };
+    }
+    if (!/\.(jsonl|ndjson|csv)$/i.test(resolved)) {
+      return { isError: true, content: [{ type: "text" as const, text: "data_file must end in .jsonl, .ndjson or .csv." }] };
+    }
+    let parsed: { data?: { name?: string } };
+    try {
+      parsed = JSON.parse(spec);
+    } catch (err) {
+      return { isError: true, content: [{ type: "text" as const, text: `spec is not valid JSON: ${(err as Error).message}` }] };
+    }
+    if (parsed?.data?.name !== "live") {
+      return { isError: true, content: [{ type: "text" as const, text: 'spec must have top-level "data": {"name": "live"}.' }] };
+    }
+    return result(await relay({ tool: "show_live_chart", spec, data_file: resolved, caption }), "Shown to the user; it updates as the file grows.");
+  },
+);
+
+server.registerTool(
   "clear_highlight",
   {
     description: "Remove the highlight placed by show_code, when it is no longer what you are talking about.",

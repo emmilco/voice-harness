@@ -16,7 +16,8 @@ export type ToWebview =
   | { type: "permission"; requestId: string; title: string; kind?: string; options: { optionId: string; name: string; kind: string }[] }
   | { type: "permissionDone"; requestId: string }
   | { type: "step"; file: string; startLine: number; endLine: number; text: string }
-  | { type: "figure"; id: string; kind: "vega-lite" | "mermaid" | "svg" | "image"; content: string; caption?: string }
+  | { type: "figure"; id: string; kind: "vega-lite" | "mermaid" | "svg" | "image"; content: string; caption?: string; live?: boolean }
+  | { type: "figureData"; id: string; rows: Record<string, unknown>[] }
   | { type: "notice"; text: string }
   | { type: "error"; text: string };
 

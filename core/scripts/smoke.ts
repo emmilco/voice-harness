@@ -118,6 +118,12 @@ const session = await AgentSession.start({
       log("editor", `show_code ${path.relative(WORKSPACE, r.path)}:${r.startLine}-${r.endLine}`);
     },
     onClearHighlight: async () => log("editor", "clear_highlight"),
+    onShowLiveChart: async (c) => {
+      figures++;
+      const problem = await checkFigure({ kind: "vega-lite", content: c.spec, caption: c.caption });
+      log("figure", `live chart following ${path.relative(WORKSPACE, c.dataFile)} → ${problem ?? "renders"}`);
+      return problem ? { ok: false as const, error: problem } : { ok: true as const };
+    },
     onExplainCode: async (s) => {
       shown++;
       const where = `explain_code #${s.step ?? "?"} ${path.relative(WORKSPACE, s.range.path)}:${s.range.startLine}-${s.range.endLine}`;

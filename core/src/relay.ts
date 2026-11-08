@@ -10,6 +10,7 @@ export type RelayRequest =
   | { tool: "show_code"; path: string; start_line: number; end_line: number }
   | { tool: "clear_highlight" }
   | { tool: "show_figure"; kind: FigureKind; content: string; caption?: string }
+  | { tool: "show_live_chart"; spec: string; data_file: string; caption?: string }
   | { tool: "explain_code"; path: string; start_line: number; end_line: number; say: string; step?: number };
 
 export interface RelayReply {

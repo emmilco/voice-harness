@@ -192,3 +192,4 @@ button.listening {
   font-family: var(--vscode-editor-font-family);
   color: var(--vscode-descriptionForeground);
 }
+.figure.live .figure-caption::before { content: "● live  "; color: var(--vscode-charts-green); }

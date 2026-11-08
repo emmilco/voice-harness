@@ -1,6 +1,6 @@
 import MarkdownIt from "markdown-it";
 import type { FromWebview, ToWebview } from "../src/protocol";
-import { renderFigure } from "./figures";
+import { renderFigure, type LiveUpdater } from "./figures";
 
 declare function acquireVsCodeApi(): { postMessage(message: FromWebview): void };
 const vscode = acquireVsCodeApi();
@@ -49,6 +49,9 @@ let agentBubble: HTMLElement | null = null;
 let renderQueued = false;
 const toolRows = new Map<string, HTMLElement>();
 const permissionCards = new Map<string, HTMLElement>();
+const liveCharts = new Map<string, LiveUpdater>();
+/** Rows that arrived before their chart finished rendering. */
+const earlyRows = new Map<string, Record<string, unknown>[]>();
 
 function scrollToEnd(): void {
   log.scrollTop = log.scrollHeight;
@@ -159,6 +162,12 @@ window.addEventListener("message", (event: MessageEvent<ToWebview>) => {
       append(bubble);
       break;
     }
+    case "figureData": {
+      const update = liveCharts.get(m.id);
+      if (update) void update(m.rows);
+      else earlyRows.set(m.id, m.rows);
+      break;
+    }
     case "figure": {
       endAgentMessage();
       const block = div("figure");
@@ -166,8 +175,15 @@ window.addEventListener("message", (event: MessageEvent<ToWebview>) => {
       block.appendChild(canvas);
       if (m.caption) block.appendChild(div("figure-caption", m.caption));
       append(block);
+      if (m.live) block.classList.add("live");
       renderFigure(canvas, m.kind, m.content).then(
-        () => {
+        (update) => {
+          if (m.live && update) {
+            liveCharts.set(m.id, update);
+            const pending = earlyRows.get(m.id);
+            earlyRows.delete(m.id);
+            if (pending) void update(pending);
+          }
           scrollToEnd();
           vscode.postMessage({ type: "figureResult", id: m.id, ok: true });
         },
