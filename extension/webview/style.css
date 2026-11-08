@@ -289,3 +289,29 @@ footer { position: relative; }
 .queued-bar { display: flex; gap: 6px; align-items: center; margin-top: 6px; white-space: normal; }
 .queued-label { flex: 1; font-size: 0.8em; color: var(--vscode-descriptionForeground); }
 .queued-bar button { padding: 1px 8px; font-size: 0.85em; }
+
+.code-block { position: relative; }
+.copy-code {
+  position: absolute; top: 4px; right: 4px; padding: 1px 8px; font-size: 0.8em;
+  opacity: 0; transition: opacity 0.1s;
+  color: var(--vscode-button-secondaryForeground); background: var(--vscode-button-secondaryBackground);
+}
+.code-block:hover .copy-code { opacity: 1; }
+
+/* Syntax colours: one palette for dark themes, one for light. */
+.hljs-keyword, .hljs-selector-tag, .hljs-literal, .hljs-built_in { color: #569cd6; }
+.hljs-string, .hljs-attr-value, .hljs-template-string, .hljs-addition { color: #ce9178; }
+.hljs-number, .hljs-symbol { color: #b5cea8; }
+.hljs-comment, .hljs-quote, .hljs-meta { color: #6a9955; font-style: italic; }
+.hljs-title, .hljs-title.function_, .hljs-section { color: #dcdcaa; }
+.hljs-title.class_, .hljs-type { color: #4ec9b0; }
+.hljs-variable, .hljs-params, .hljs-attr, .hljs-property { color: #9cdcfe; }
+.hljs-deletion { color: #f48771; }
+body.vscode-light .hljs-keyword, body.vscode-light .hljs-selector-tag, body.vscode-light .hljs-literal, body.vscode-light .hljs-built_in { color: #0000ff; }
+body.vscode-light .hljs-string, body.vscode-light .hljs-attr-value, body.vscode-light .hljs-template-string, body.vscode-light .hljs-addition { color: #a31515; }
+body.vscode-light .hljs-number, body.vscode-light .hljs-symbol { color: #098658; }
+body.vscode-light .hljs-comment, body.vscode-light .hljs-quote, body.vscode-light .hljs-meta { color: #008000; }
+body.vscode-light .hljs-title, body.vscode-light .hljs-title.function_, body.vscode-light .hljs-section { color: #795e26; }
+body.vscode-light .hljs-title.class_, body.vscode-light .hljs-type { color: #267f99; }
+body.vscode-light .hljs-variable, body.vscode-light .hljs-params, body.vscode-light .hljs-attr, body.vscode-light .hljs-property { color: #001080; }
+body.vscode-light .hljs-deletion { color: #a31515; }

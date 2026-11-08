@@ -2,21 +2,38 @@ import MarkdownIt from "markdown-it";
 import type { FromWebview, ToWebview } from "../src/protocol";
 import { renderFigure, type LiveUpdater } from "./figures";
 import { Completer } from "./completer";
+import { highlight } from "./highlight";
 import { ToolCards, renderToolContent } from "./tools";
 
 declare function acquireVsCodeApi(): { postMessage(message: FromWebview): void };
 const vscode = acquireVsCodeApi();
 
 // Raw HTML in agent output is escaped, never rendered.
-const md = new MarkdownIt({ html: false, linkify: true, breaks: false });
+const md = new MarkdownIt({
+  html: false,
+  linkify: true,
+  breaks: false,
+  highlight: (code, language) => highlight(code, language) ?? "",
+});
 const defaultFence = md.renderer.rules.fence!;
 md.renderer.rules.fence = (tokens, idx, options, env, self) => {
   const token = tokens[idx];
   if (token.info.trim() === "onscreen") {
     return `<div class="onscreen" title="Shown, not spoken">${md.render(token.content)}</div>`;
   }
-  return defaultFence(tokens, idx, options, env, self);
+  return `<div class="code-block"><button class="copy-code" title="Copy">Copy</button>${defaultFence(tokens, idx, options, env, self)}</div>`;
 };
+
+// One handler for every code block's Copy button, wherever it was rendered.
+document.addEventListener("click", (e) => {
+  const button = (e.target as HTMLElement).closest(".copy-code");
+  if (!button) return;
+  const code = button.parentElement?.querySelector("code")?.textContent ?? "";
+  void navigator.clipboard.writeText(code).then(() => {
+    button.textContent = "Copied";
+    setTimeout(() => (button.textContent = "Copy"), 1200);
+  });
+});
 
 const log = document.getElementById("log")!;
 const status = document.getElementById("status")!;
@@ -72,6 +89,13 @@ let autoListening = false;
 
 let ready = false;
 let busy = false;
+let busySince = 0;
+let busyTimer: ReturnType<typeof setInterval> | undefined;
+
+function showWorking(): void {
+  const seconds = Math.floor((Date.now() - busySince) / 1000);
+  status.textContent = `Claude is working… ${seconds} s`;
+}
 let agentText = "";
 let agentBubble: HTMLElement | null = null;
 let renderQueued = false;
@@ -140,10 +164,17 @@ window.addEventListener("message", (event: MessageEvent<ToWebview>) => {
   switch (m.type) {
     case "state":
       ready = m.state === "ready" || m.state === "busy";
+      if (m.state === "busy" && !busy) {
+        busySince = Date.now();
+        busyTimer = setInterval(showWorking, 1000);
+      } else if (m.state !== "busy" && busyTimer) {
+        clearInterval(busyTimer);
+        busyTimer = undefined;
+      }
       busy = m.state === "busy";
       status.className = `status ${m.state}`;
-      status.textContent =
-        m.state === "busy" ? "Claude is working…" : m.state === "ready" ? `Ready — ${m.detail ?? ""}` : (m.detail ?? m.state);
+      if (busy) showWorking();
+      else status.textContent = m.state === "ready" ? `Ready — ${m.detail ?? ""}` : (m.detail ?? m.state);
       updateControls();
       if (m.state === "ready") input.focus();
       break;
