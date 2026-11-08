@@ -67,6 +67,8 @@ export class HarnessPanel implements vscode.Disposable {
   /** True from a cancel (or the start of listening) until the next turn starts. */
   private suppressSpeech = false;
   private turn: Promise<void> | null = null;
+  /** Typed messages waiting for the running turn to finish, oldest first. */
+  private readonly queue: { id: string; text: string }[] = [];
   private readonly pendingPermissions = new Map<string, (optionId: string | null) => void>();
   private readonly pendingFigures = new Map<string, (result: { ok: boolean; error?: string }) => void>();
   /** Live charts following their data files, oldest first. */
@@ -144,8 +146,17 @@ export class HarnessPanel implements vscode.Disposable {
         await this.startSession();
         break;
       case "send":
-        await this.send(m.text, false);
+        if (this.turn) this.enqueue(m.text);
+        else await this.send(m.text, false);
         break;
+      case "unqueue":
+        this.removeQueued(m.id);
+        break;
+      case "sendNow": {
+        const item = this.removeQueued(m.id);
+        if (item) await this.send(item.text, false);
+        break;
+      }
       case "stop":
         this.stopEverything();
         break;
@@ -400,13 +411,34 @@ export class HarnessPanel implements vscode.Disposable {
       } finally {
         if (this.turn === turn) this.turn = null;
         this.post({ type: "state", state: this.session ? "ready" : "stopped", detail: this.session?.loginSummary });
+        if (this.turn === null && this.queue.length) {
+          this.awaitingReply = false;
+          const next = this.queue.shift()!;
+          this.post({ type: "dequeued", id: next.id });
+          setTimeout(() => void this.send(next.text, false), 0);
+        }
       }
     })();
     this.turn = turn;
     await turn;
   }
 
+  private enqueue(text: string): void {
+    const id = randomBytes(6).toString("hex");
+    this.queue.push({ id, text });
+    this.post({ type: "queued", id, text });
+  }
+
+  private removeQueued(id: string): { id: string; text: string } | undefined {
+    const index = this.queue.findIndex((q) => q.id === id);
+    if (index < 0) return undefined;
+    const [item] = this.queue.splice(index, 1);
+    this.post({ type: "dequeued", id });
+    return item;
+  }
+
   private stopEverything(): void {
+    for (const q of this.queue.splice(0)) this.post({ type: "dequeued", id: q.id });
     this.awaitingReply = false;
     this.silence();
     if (this.voiceState === "listening" || this.voiceState === "warming") this.cancelListening();
@@ -420,7 +452,7 @@ export class HarnessPanel implements vscode.Disposable {
 
   /** In conversation mode, opens the mic for the user's reply once Claude has finished speaking. */
   private maybeListenForReply(): void {
-    if (!this.conversation || !this.awaitingReply || this.turn || !this.voice || !this.microphone) return;
+    if (!this.conversation || !this.awaitingReply || this.turn || this.queue.length || !this.voice || !this.microphone) return;
     if (this.voiceState !== "idle") return;
     this.awaitingReply = false;
     this.autoTurn.start();

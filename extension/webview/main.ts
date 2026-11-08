@@ -80,6 +80,7 @@ const openDiff = (path: string, oldText: string | null, newText: string) =>
 const tools = new ToolCards(md, openDiff);
 const permissionCards = new Map<string, HTMLElement>();
 const liveCharts = new Map<string, LiveUpdater>();
+const queuedBubbles = new Map<string, HTMLElement>();
 /** Rows that arrived before their chart finished rendering. */
 const earlyRows = new Map<string, Record<string, unknown>[]>();
 
@@ -114,7 +115,9 @@ function endAgentMessage(): void {
 }
 
 function updateControls(): void {
-  sendButton.disabled = !ready || busy;
+  sendButton.disabled = !ready;
+  sendButton.textContent = busy ? "Queue" : "Send";
+  sendButton.title = busy ? "Claude is working; this message waits for the current turn to finish" : "Send (Enter)";
   stopButton.disabled = !busy && !listening;
   input.disabled = !ready;
   talkButton.disabled = !ready || !voiceUsable;
@@ -127,7 +130,7 @@ function updateControls(): void {
 
 function send(): void {
   const text = input.value.trim();
-  if (!text || !ready || busy) return;
+  if (!text || !ready) return;
   input.value = "";
   vscode.postMessage({ type: "send", text });
 }
@@ -222,6 +225,31 @@ window.addEventListener("message", (event: MessageEvent<ToWebview>) => {
       usage.classList.toggle("high", ratio > 0.8);
       break;
     }
+    case "queued": {
+      const bubble = div("message user queued", m.text);
+      const bar = div("queued-bar");
+      bar.appendChild(div("queued-label", "queued — sends when Claude finishes"));
+      const now = document.createElement("button");
+      now.className = "secondary";
+      now.textContent = "Send now";
+      now.title = "Interrupt Claude and send this now";
+      now.addEventListener("click", () => vscode.postMessage({ type: "sendNow", id: m.id }));
+      const drop = document.createElement("button");
+      drop.className = "secondary";
+      drop.textContent = "✕";
+      drop.title = "Remove from the queue";
+      drop.addEventListener("click", () => vscode.postMessage({ type: "unqueue", id: m.id }));
+      bar.append(now, drop);
+      bubble.appendChild(bar);
+      queuedBubbles.set(m.id, bubble);
+      append(bubble);
+      scrollToEnd();
+      break;
+    }
+    case "dequeued":
+      queuedBubbles.get(m.id)?.remove();
+      queuedBubbles.delete(m.id);
+      break;
     case "commands":
       commands = m.commands;
       break;
