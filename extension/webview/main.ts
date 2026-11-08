@@ -1,6 +1,7 @@
 import MarkdownIt from "markdown-it";
 import type { FromWebview, ToWebview } from "../src/protocol";
 import { renderFigure, type LiveUpdater } from "./figures";
+import { Completer } from "./completer";
 import { ToolCards, renderToolContent } from "./tools";
 
 declare function acquireVsCodeApi(): { postMessage(message: FromWebview): void };
@@ -50,6 +51,18 @@ const VOICE_LABELS: Record<string, string> = {
   interrupted: "Paused — you're speaking",
   unavailable: "Voice unavailable",
 };
+const completer = new Completer(input);
+let commands: { name: string; description: string; hint?: string }[] = [];
+completer.addSource((text, caret) => {
+  const m = /^\/(\S*)$/.exec(text.slice(0, caret));
+  if (!m) return undefined;
+  const typed = m[1].toLowerCase();
+  const items = commands
+    .filter((c) => c.name.toLowerCase().includes(typed))
+    .sort((a, b) => Number(!a.name.toLowerCase().startsWith(typed)) - Number(!b.name.toLowerCase().startsWith(typed)))
+    .map((c) => ({ label: `/${c.name}`, detail: c.hint ? `${c.hint} — ${c.description}` : c.description, insert: `/${c.name} ` }));
+  return { start: 0, items };
+});
 let voiceUsable = false;
 let voiceText = "";
 const meter = document.createElement("span");
@@ -209,6 +222,9 @@ window.addEventListener("message", (event: MessageEvent<ToWebview>) => {
       usage.classList.toggle("high", ratio > 0.8);
       break;
     }
+    case "commands":
+      commands = m.commands;
+      break;
     case "title": {
       const title = document.getElementById("title")!;
       title.textContent = m.title;
@@ -351,6 +367,10 @@ window.addEventListener("message", (event: MessageEvent<ToWebview>) => {
 });
 
 input.addEventListener("keydown", (e) => {
+  if (completer.handleKey(e)) {
+    e.preventDefault();
+    return;
+  }
   if (e.key === "Enter" && !e.shiftKey && !e.isComposing) {
     e.preventDefault();
     send();

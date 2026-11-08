@@ -238,6 +238,7 @@ export class HarnessPanel implements vscode.Disposable {
           onConfigOptions: (options) => this.postOptions(options),
           onUsage: (usage) => this.post({ type: "usage", used: usage.used, size: usage.size }),
           onTitle: (title) => this.setTitle(title),
+          onCommands: (commands) => this.post({ type: "commands", commands }),
           onText: (chunk) => {
             this.flushReplayedUser();
             this.post({ type: "agentText", chunk });
@@ -373,9 +374,11 @@ export class HarnessPanel implements vscode.Disposable {
     const session = this.session;
     if (!session) return;
     this.suppressSpeech = false;
-    const context = vscode.workspace.getConfiguration("voiceHarness").get<boolean>("sendEditorContext", true)
-      ? this.tracker.current()
-      : undefined;
+    // A slash command must start the message, so it is sent without editor context.
+    const context =
+      !text.startsWith("/") && vscode.workspace.getConfiguration("voiceHarness").get<boolean>("sendEditorContext", true)
+        ? this.tracker.current()
+        : undefined;
     const prompt = context ? `${formatEditorContext(context)}\n\n${text}` : text;
     this.post({ type: "partial", text: "", source: null });
     this.post({ type: "user", text, spoken, context: context ? editorContextLabel(context) : undefined });

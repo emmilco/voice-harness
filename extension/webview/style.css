@@ -271,3 +271,17 @@ button.listening {
 .option-toggle { color: var(--vscode-descriptionForeground); }
 .usage { color: var(--vscode-descriptionForeground); font-family: var(--vscode-editor-font-family); }
 .usage.high { color: var(--vscode-charts-orange); }
+
+footer { position: relative; }
+.completions {
+  position: absolute; left: 12px; right: 12px; bottom: 100%;
+  max-height: 240px; overflow-y: auto;
+  border: 1px solid var(--vscode-editorSuggestWidget-border, var(--vscode-panel-border));
+  background: var(--vscode-editorSuggestWidget-background, var(--vscode-editor-background));
+  border-radius: 6px; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+}
+.completions[hidden] { display: none; }
+.completion { display: flex; gap: 10px; padding: 3px 8px; cursor: pointer; font-size: 0.9em; }
+.completion.selected { background: var(--vscode-editorSuggestWidget-selectedBackground, var(--vscode-list-activeSelectionBackground)); }
+.completion-label { font-family: var(--vscode-editor-font-family); white-space: nowrap; }
+.completion-detail { color: var(--vscode-descriptionForeground); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

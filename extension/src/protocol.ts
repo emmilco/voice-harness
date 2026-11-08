@@ -46,6 +46,7 @@ export type ToWebview =
   | { type: "options"; options: { id: string; name: string; current: string; choices: { value: string; name: string; description?: string }[] }[] }
   | { type: "usage"; used: number; size: number }
   | { type: "title"; title: string }
+  | { type: "commands"; commands: { name: string; description: string; hint?: string }[] }
   | { type: "notice"; text: string }
   | { type: "error"; text: string };
 

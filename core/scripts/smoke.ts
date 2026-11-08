@@ -95,6 +95,7 @@ const session = await AgentSession.start({
       text += c;
       if (voice) say(chunker.push(c));
     },
+    onCommands: (cmds) => log("commands", `${cmds.length} available: ${cmds.slice(0, 6).map((c) => "/" + c.name).join(" ")} …`),
     onToolCall: (t, isUpdate) => {
       if (process.env.VH_LOG_CONTENT && t.content?.length) {
         log("content", `${t.name ?? "?"} ${t.status ?? ""} ${t.content.map((c) => (c.kind === "diff" ? `diff(${path.basename(c.path)})` : `text(${c.text.length})`)).join(", ")}`);

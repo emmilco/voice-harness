@@ -99,6 +99,8 @@ export interface SessionHandlers {
   onUsage?(usage: { used: number; size: number }): void;
   /** The conversation's title, when the agent sets or changes it. */
   onTitle?(title: string): void;
+  /** Slash commands (and skills) the agent accepts at the start of a message. */
+  onCommands?(commands: { name: string; description: string; hint?: string }[]): void;
   /** A new tool call (`isUpdate` false) or a change to one already reported. */
   onToolCall(info: ToolCallInfo, isUpdate: boolean): void;
   /** Resolve with the chosen optionId, or null to cancel. `signal` aborts when the turn is cancelled. */
@@ -232,6 +234,15 @@ export class AgentSession {
             break;
           case "session_info_update":
             if (u.title) handlers.onTitle?.(u.title);
+            break;
+          case "available_commands_update":
+            handlers.onCommands?.(
+              u.availableCommands.map((c) => ({
+                name: c.name,
+                description: c.description,
+                hint: (c.input as { hint?: string } | null | undefined)?.hint ?? undefined,
+              })),
+            );
             break;
           case "tool_call":
             handlers.onToolCall(
