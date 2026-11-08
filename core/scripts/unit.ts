@@ -1,6 +1,6 @@
 // Unit tests for the pure speech logic: `npm run unit -w core`.
 import assert from "node:assert/strict";
-import { SpeechChunker, StepSequencer, parseDataFile, classifyInterruption, editorContextLabel, formatEditorContext } from "../src/index";
+import { RestartPolicy, SpeechChunker, StepSequencer, parseDataFile, classifyInterruption, editorContextLabel, formatEditorContext } from "../src/index";
 
 function speakAll(chunks: string[]): string[] {
   const c = new SpeechChunker();
@@ -115,6 +115,19 @@ const cases: [string, () => void][] = [
     const rows = parseDataFile("big.jsonl", text);
     assert.equal(rows.length, 5000);
     assert.deepEqual(rows[0], { step: 1000 });
+  }],
+  ["restart policy: growing delays, then gives up within the window", () => {
+    const p = new RestartPolicy(3, 120_000);
+    assert.deepEqual([p.next(0), p.next(1000), p.next(2000), p.next(3000)], [1000, 2000, 3000, null]);
+  }],
+  ["restart policy: old crashes age out; reset forgets", () => {
+    const p = new RestartPolicy(3, 120_000);
+    p.next(0);
+    p.next(1000);
+    p.next(2000);
+    assert.equal(p.next(130_000), 1000);
+    p.reset();
+    assert.equal(p.next(131_000), 1000);
   }],
   ["interruption policy", () => {
     for (const t of ["", "mm-hmm", "Yeah.", "okay okay", "Go on.", "uh huh", "Got it", "right"]) assert.equal(classifyInterruption(t), "resume", t);

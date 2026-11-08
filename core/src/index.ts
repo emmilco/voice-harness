@@ -6,6 +6,7 @@ export { SPEECH_LAYER } from "./speechLayer";
 export { SpeechChunker, cleanMarkdown, splitSentences } from "./speechText";
 export { editorContextLabel, formatEditorContext, type EditorContext } from "./editorContext";
 export { parseDataFile, type Row } from "./dataFile";
+export { RestartPolicy } from "./restartPolicy";
 export { StepSequencer } from "./stepSequencer";
 export { classifyInterruption, type InterruptionAction } from "./turnPolicy";
 export { VoiceClient, type VoiceClientOptions, type VoiceEvent } from "./voiceClient";

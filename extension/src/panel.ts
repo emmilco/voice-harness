@@ -7,6 +7,7 @@ import {
   AgentSession,
   BillingGuardError,
   SPEECH_LAYER,
+  RestartPolicy,
   SpeechChunker,
   StepSequencer,
   VoiceClient,
@@ -44,6 +45,7 @@ export class HarnessPanel implements vscode.Disposable {
   private inputDevice: string | undefined;
   private speakReplies: boolean;
   private readonly chunker = new SpeechChunker();
+  private readonly voiceRestarts = new RestartPolicy();
   private readonly steps = new StepSequencer<ExplainStep>((step) => this.presentStep(step));
   /** True while a loaded session's history is replayed: shown, not spoken, no editor effects. */
   private replaying = false;
@@ -86,6 +88,15 @@ export class HarnessPanel implements vscode.Disposable {
 
   static toggleListening(): void {
     HarnessPanel.current?.talk();
+  }
+
+  static restartVoice(): void {
+    const panel = HarnessPanel.current;
+    if (!panel) return;
+    panel.voiceRestarts.reset();
+    panel.voice?.dispose();
+    panel.voice = undefined;
+    panel.startVoice();
   }
 
   /** Ends the agent and voice processes when the extension deactivates. */
@@ -342,8 +353,20 @@ export class HarnessPanel implements vscode.Disposable {
       onEvent: (e) => this.onVoiceEvent(e),
       onExit: (reason) => {
         this.voice = undefined;
+        this.pendingMarks.clear();
+        this.chunker.reset();
         this.output.appendLine(reason);
-        this.setVoice("unavailable", reason);
+        if (this.disposed) return;
+        const delay = this.voiceRestarts.next();
+        if (delay === null) {
+          this.setVoice("unavailable", `${reason}; it keeps stopping, so it was not restarted (Voice Harness: Restart Voice to try again)`);
+          return;
+        }
+        this.setVoice("loading", "Voice stopped unexpectedly; restarting…");
+        this.post({ type: "notice", text: "The voice process stopped unexpectedly and is restarting." });
+        setTimeout(() => {
+          if (!this.disposed && !this.voice) this.startVoice();
+        }, delay);
       },
     });
   }

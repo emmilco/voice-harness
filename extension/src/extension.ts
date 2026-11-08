@@ -8,6 +8,7 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand("voiceHarness.openPanel", () => HarnessPanel.show(context, output)),
     vscode.commands.registerCommand("voiceHarness.restartSession", () => HarnessPanel.restart()),
     vscode.commands.registerCommand("voiceHarness.toggleListening", () => HarnessPanel.toggleListening()),
+    vscode.commands.registerCommand("voiceHarness.restartVoice", () => HarnessPanel.restartVoice()),
   );
 }
 
