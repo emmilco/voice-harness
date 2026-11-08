@@ -16,6 +16,7 @@ import {
   editorContextLabel,
   formatEditorContext,
   parseDataFile,
+  type ConfigOption,
   type ExplainStep,
   type Figure,
   type LiveChart,
@@ -173,6 +174,14 @@ export class HarnessPanel implements vscode.Disposable {
       case "figureResult":
         this.pendingFigures.get(m.id)?.({ ok: m.ok, error: m.error });
         break;
+      case "setOption":
+        try {
+          await this.session?.setConfigOption(m.id, m.value);
+        } catch (err) {
+          this.post({ type: "notice", text: `Could not change ${m.id}: ${(err as Error).message}` });
+          if (this.session) this.postOptions(this.session.configOptions);
+        }
+        break;
       case "openDiff":
         await this.diffs.open(m.path, m.oldText, m.newText);
         break;
@@ -226,6 +235,9 @@ export class HarnessPanel implements vscode.Disposable {
         systemPromptAppend: SPEECH_LAYER,
         loadSessionId,
         handlers: {
+          onConfigOptions: (options) => this.postOptions(options),
+          onUsage: (usage) => this.post({ type: "usage", used: usage.used, size: usage.size }),
+          onTitle: (title) => this.setTitle(title),
           onText: (chunk) => {
             this.flushReplayedUser();
             this.post({ type: "agentText", chunk });
@@ -272,6 +284,29 @@ export class HarnessPanel implements vscode.Disposable {
       this.output.appendLine(`start failed: ${detail}`);
       this.post({ type: "state", state: "error", detail });
     }
+  }
+
+  // MARK: Session bar
+
+  /** Settings shown in the session bar, in this order; others the agent offers are not shown. */
+  private static readonly SHOWN_OPTIONS = ["model", "mode", "effort", "fast"];
+  /** Never offered in the mode picker (the user's AI security protocol rules it out). */
+  private static readonly HIDDEN_CHOICES = new Set(["bypassPermissions"]);
+
+  private postOptions(options: ConfigOption[]): void {
+    const shown = HarnessPanel.SHOWN_OPTIONS.flatMap((id) => {
+      const o = options.find((x) => x.id === id);
+      if (!o) return [];
+      return [{ ...o, choices: o.choices.filter((c) => !HarnessPanel.HIDDEN_CHOICES.has(c.value) || c.value === o.current) }];
+    });
+    this.post({ type: "options", options: shown });
+  }
+
+  private setTitle(title: string): void {
+    const clean = HarnessPanel.withoutEditorContext(title).trim();
+    if (!clean) return;
+    this.panel.title = `Voice Harness: ${clean}`;
+    this.post({ type: "title", title: clean });
   }
 
   // MARK: Past sessions
@@ -758,7 +793,9 @@ export class HarnessPanel implements vscode.Disposable {
 </head>
 <body>
 <header>
+  <div id="title" class="conversation-title" hidden></div>
   <div id="status" class="status starting">Starting…</div>
+  <div id="session-bar" class="session-bar"><span id="options" class="options"></span><span id="usage" class="usage"></span></div>
   <div id="voice" class="voice loading">Voice loading…</div>
 </header>
 <main id="log"></main>

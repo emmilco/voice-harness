@@ -43,6 +43,9 @@ export type ToWebview =
   | { type: "figureData"; id: string; rows: Record<string, unknown>[] }
   | { type: "sessions"; items: { id: string; title: string; updatedAt?: string }[]; currentId?: string }
   | { type: "clear" }
+  | { type: "options"; options: { id: string; name: string; current: string; choices: { value: string; name: string; description?: string }[] }[] }
+  | { type: "usage"; used: number; size: number }
+  | { type: "title"; title: string }
   | { type: "notice"; text: string }
   | { type: "error"; text: string };
 
@@ -59,4 +62,5 @@ export type FromWebview =
   | { type: "openDiff"; path: string; oldText: string | null; newText: string }
   | { type: "listSessions" }
   | { type: "loadSession"; id: string }
-  | { type: "newSession" };
+  | { type: "newSession" }
+  | { type: "setOption"; id: string; value: string };

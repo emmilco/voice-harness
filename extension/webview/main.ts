@@ -172,6 +172,49 @@ window.addEventListener("message", (event: MessageEvent<ToWebview>) => {
     case "notice":
       append(div("notice", m.text));
       break;
+    case "options": {
+      const holder = document.getElementById("options")!;
+      holder.replaceChildren();
+      for (const o of m.options) {
+        if (o.id === "fast") {
+          const label = document.createElement("label");
+          label.className = "option-toggle";
+          const box = document.createElement("input");
+          box.type = "checkbox";
+          box.checked = o.current === "on";
+          box.addEventListener("change", () => vscode.postMessage({ type: "setOption", id: o.id, value: box.checked ? "on" : "off" }));
+          label.append(box, document.createTextNode(` ${o.name}`));
+          holder.appendChild(label);
+          continue;
+        }
+        const select = document.createElement("select");
+        select.className = "option-select";
+        select.title = o.name;
+        for (const c of o.choices) {
+          const opt = new Option(`${o.name}: ${c.name}`, c.value, false, c.value === o.current);
+          if (c.description) opt.title = c.description;
+          select.add(opt);
+        }
+        select.addEventListener("change", () => vscode.postMessage({ type: "setOption", id: o.id, value: select.value }));
+        holder.appendChild(select);
+      }
+      break;
+    }
+    case "usage": {
+      const usage = document.getElementById("usage")!;
+      const k = (n: number) => (n >= 1_000_000 ? `${(n / 1_000_000).toFixed(n % 1_000_000 ? 1 : 0)}M` : `${Math.round(n / 1000)}k`);
+      const ratio = m.size ? m.used / m.size : 0;
+      usage.textContent = `context ${k(m.used)} / ${k(m.size)}`;
+      usage.title = `${m.used.toLocaleString()} of ${m.size.toLocaleString()} tokens (${Math.round(ratio * 100)}%)`;
+      usage.classList.toggle("high", ratio > 0.8);
+      break;
+    }
+    case "title": {
+      const title = document.getElementById("title")!;
+      title.textContent = m.title;
+      title.hidden = false;
+      break;
+    }
     case "clear":
       endAgentMessage();
       log.replaceChildren();
@@ -180,6 +223,8 @@ window.addEventListener("message", (event: MessageEvent<ToWebview>) => {
       liveCharts.clear();
       earlyRows.clear();
       sessionMenu.hidden = true;
+      document.getElementById("title")!.hidden = true;
+      document.getElementById("usage")!.textContent = "";
       break;
     case "sessions": {
       sessionList.replaceChildren();

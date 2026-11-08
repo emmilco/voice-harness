@@ -73,6 +73,14 @@ export interface ExplainStep {
 }
 
 /** Callbacks through which a front end (VS Code, a test script) presents the session. */
+/** A session setting the agent offers (model, mode, effort…), with its current value. */
+export interface ConfigOption {
+  id: string;
+  name: string;
+  current: string;
+  choices: { value: string; name: string; description?: string }[];
+}
+
 /** A past conversation that can be loaded. */
 export interface SessionSummary {
   id: string;
@@ -85,6 +93,12 @@ export interface SessionHandlers {
   onText(chunk: string): void;
   /** Text of a user message, reported while a loaded session's history is replayed. */
   onUserText?(chunk: string): void;
+  /** The session's settings, whenever they are first known or change. */
+  onConfigOptions?(options: ConfigOption[]): void;
+  /** Context window use, in tokens. */
+  onUsage?(usage: { used: number; size: number }): void;
+  /** The conversation's title, when the agent sets or changes it. */
+  onTitle?(title: string): void;
   /** A new tool call (`isUpdate` false) or a change to one already reported. */
   onToolCall(info: ToolCallInfo, isUpdate: boolean): void;
   /** Resolve with the chosen optionId, or null to cancel. `signal` aborts when the turn is cancelled. */
@@ -137,6 +151,8 @@ type SystemPromptParam = { mode: "append"; content: { type: "text"; text: string
 export class AgentSession {
   private turnAbort: AbortController | null = null;
   private disposed = false;
+  private options: ConfigOption[] = [];
+  private handlers!: SessionHandlers;
 
   private constructor(
     private readonly child: ChildProcess,
@@ -204,6 +220,18 @@ export class AgentSession {
             break;
           case "user_message_chunk":
             if (u.content.type === "text") handlers.onUserText?.(u.content.text);
+            break;
+          case "config_option_update":
+            session?.setOptions(u.configOptions);
+            break;
+          case "current_mode_update":
+            session?.setCurrent("mode", u.currentModeId);
+            break;
+          case "usage_update":
+            handlers.onUsage?.({ used: u.used, size: u.size });
+            break;
+          case "session_info_update":
+            if (u.title) handlers.onTitle?.(u.title);
             break;
           case "tool_call":
             handlers.onToolCall(
@@ -277,20 +305,54 @@ export class AgentSession {
         systemPrompt: { mode: "append" as const, content: [{ type: "text" as const, text: opts.systemPromptAppend }] },
       };
       let sessionId: string;
+      let configOptions: unknown;
       if (opts.loadSessionId) {
-        await agent.request(methods.agent.session.load, { ...setup, sessionId: opts.loadSessionId });
+        const loaded = (await agent.request(methods.agent.session.load, { ...setup, sessionId: opts.loadSessionId })) as { configOptions?: unknown };
         sessionId = opts.loadSessionId;
+        configOptions = loaded.configOptions;
       } else {
-        const created = (await agent.request(methods.agent.session.new, { ...setup })) as { sessionId: string };
+        const created = (await agent.request(methods.agent.session.new, { ...setup })) as { sessionId: string; configOptions?: unknown };
         sessionId = created.sessionId;
+        configOptions = created.configOptions;
       }
       session = new AgentSession(child, connection, relay, setup, sessionId, billing.summary);
+      session.handlers = handlers;
+      session.setOptions(configOptions);
       return session;
     } catch (err) {
       child.kill("SIGTERM");
       relay.close();
       throw err;
     }
+  }
+
+  /** The session's settings as last reported. */
+  get configOptions(): ConfigOption[] {
+    return this.options;
+  }
+
+  /** Changes a session setting (e.g. "model", "mode", "effort"). */
+  async setConfigOption(configId: string, value: string): Promise<void> {
+    const res = (await this.connection.agent.request(methods.agent.session.setConfigOption, {
+      sessionId: this.currentSessionId,
+      configId,
+      value,
+    } as never)) as { configOptions?: unknown };
+    if (res?.configOptions) this.setOptions(res.configOptions);
+    else this.setCurrent(configId, value);
+  }
+
+  private setOptions(raw: unknown): void {
+    if (!Array.isArray(raw)) return;
+    this.options = raw.map(toConfigOption).filter((o): o is ConfigOption => o !== undefined);
+    this.handlers.onConfigOptions?.(this.options);
+  }
+
+  private setCurrent(id: string, value: string): void {
+    const option = this.options.find((o) => o.id === id);
+    if (!option) return;
+    option.current = value;
+    this.handlers.onConfigOptions?.(this.options);
   }
 
   /** This folder's past sessions, most recently active first (up to `limit`). */
@@ -310,8 +372,11 @@ export class AgentSession {
   /** Switches to a past session; its history is replayed through the handlers before this resolves. */
   async load(sessionId: string): Promise<void> {
     if (this.turnAbort) this.cancel();
-    await this.connection.agent.request(methods.agent.session.load, { ...this.sessionSetup, sessionId });
+    const loaded = (await this.connection.agent.request(methods.agent.session.load, { ...this.sessionSetup, sessionId })) as {
+      configOptions?: unknown;
+    };
     this.currentSessionId = sessionId;
+    this.setOptions(loaded?.configOptions);
   }
 
   /** Sends one user turn; resolves with the stop reason when the turn ends. */
@@ -341,6 +406,23 @@ export class AgentSession {
     this.child.kill("SIGTERM");
     this.relay.close();
   }
+}
+
+/** A select-type setting with its choices flattened (grouped choices lose their headers). */
+function toConfigOption(raw: unknown): ConfigOption | undefined {
+  const o = raw as { id?: string; name?: string; currentValue?: string; options?: unknown[] };
+  if (typeof o?.id !== "string" || typeof o.currentValue !== "string" || !Array.isArray(o.options)) return undefined;
+  const choices: ConfigOption["choices"] = [];
+  for (const item of o.options as { value?: string; name?: string; description?: string | null; options?: unknown[] }[]) {
+    if (Array.isArray(item.options)) {
+      for (const sub of item.options as { value?: string; name?: string; description?: string | null }[]) {
+        if (typeof sub.value === "string") choices.push({ value: sub.value, name: sub.name ?? sub.value, description: sub.description ?? undefined });
+      }
+    } else if (typeof item.value === "string") {
+      choices.push({ value: item.value, name: item.name ?? item.value, description: item.description ?? undefined });
+    }
+  }
+  return { id: o.id, name: o.name ?? o.id, current: o.currentValue, choices };
 }
 
 /** Tool content in a front-end friendly form; undefined when the update carries none. */

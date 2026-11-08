@@ -258,3 +258,16 @@ button.listening {
 .diff-line.del { background: var(--vscode-diffEditor-removedLineBackground, rgba(230, 80, 80, 0.15)); }
 .diff-line.ctx { color: var(--vscode-descriptionForeground); }
 .permission-detail { margin: 0 0 8px; max-height: 300px; overflow: auto; font-size: 0.9em; }
+
+.conversation-title { padding: 6px 12px 0; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.conversation-title[hidden] { display: none; }
+.session-bar { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 0 12px 6px; font-size: 0.85em; }
+.options { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; flex: 1; }
+.option-select {
+  font: inherit; padding: 1px 4px; border-radius: 3px;
+  color: var(--vscode-dropdown-foreground); background: var(--vscode-dropdown-background);
+  border: 1px solid var(--vscode-dropdown-border, transparent);
+}
+.option-toggle { color: var(--vscode-descriptionForeground); }
+.usage { color: var(--vscode-descriptionForeground); font-family: var(--vscode-editor-font-family); }
+.usage.high { color: var(--vscode-charts-orange); }

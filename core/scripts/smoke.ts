@@ -150,7 +150,9 @@ const session = await AgentSession.start({
     onExit: (reason) => log("exit", reason),
   },
 });
-log("session", `${session.sessionId} (${session.loginSummary})`);
+// Prompting mode, so the permission policy above sees every action (the user's default may be "auto").
+await session.setConfigOption("mode", "default");
+log("session", `${session.sessionId} (${session.loginSummary}); options: ${session.configOptions.map((o) => `${o.id}=${o.current}`).join(", ")}`);
 
 const stop = await session.prompt(PROMPT);
 if (voice) {
