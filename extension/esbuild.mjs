@@ -30,6 +30,7 @@ await Promise.all([
     platform: "browser",
     format: "iife",
     target: "es2022",
+    minify: true,
   }),
 ]);
 copyFileSync("webview/style.css", "dist/webview.css");

@@ -160,3 +160,19 @@ button.listening {
   color: var(--vscode-button-foreground);
 }
 .meter { font-family: var(--vscode-editor-font-family); letter-spacing: -1px; margin-left: 4px; }
+
+.figure {
+  margin: 0 0 12px;
+  padding: 10px;
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 6px;
+  background: var(--vscode-editor-background);
+}
+.figure-body { overflow-x: auto; }
+.figure-body img, .figure-body svg { max-width: 100%; height: auto; display: block; margin: 0 auto; }
+.figure-caption {
+  margin-top: 6px;
+  font-size: 0.85em;
+  text-align: center;
+  color: var(--vscode-descriptionForeground);
+}

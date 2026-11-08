@@ -40,6 +40,8 @@ export interface VoiceClientOptions {
   voice: string;
   /** macOS voice processing (echo cancellation) for use without headphones. */
   voiceProcessing: boolean;
+  /** Pause speech automatically when the user starts talking over it. */
+  interruptions: boolean;
   onEvent(e: VoiceEvent): void;
   onExit(reason: string): void;
 }
@@ -54,6 +56,7 @@ export class VoiceClient {
   static start(opts: VoiceClientOptions): VoiceClient {
     const args = ["--models", opts.modelsDirectory, "--voice", opts.voice];
     if (opts.voiceProcessing) args.push("--voice-processing");
+    if (opts.interruptions) args.push("--interruptions");
     const child = spawn(opts.binary, args, { stdio: ["pipe", "pipe", "pipe"] });
     const client = new VoiceClient(child);
     child.stdin?.on("error", () => {});

@@ -1,5 +1,6 @@
 import MarkdownIt from "markdown-it";
 import type { FromWebview, ToWebview } from "../src/protocol";
+import { renderFigure } from "./figures";
 
 declare function acquireVsCodeApi(): { postMessage(message: FromWebview): void };
 const vscode = acquireVsCodeApi();
@@ -138,6 +139,26 @@ window.addEventListener("message", (event: MessageEvent<ToWebview>) => {
     case "notice":
       append(div("notice", m.text));
       break;
+    case "figure": {
+      endAgentMessage();
+      const block = div("figure");
+      const canvas = div("figure-body");
+      block.appendChild(canvas);
+      if (m.caption) block.appendChild(div("figure-caption", m.caption));
+      append(block);
+      renderFigure(canvas, m.kind, m.content).then(
+        () => {
+          scrollToEnd();
+          vscode.postMessage({ type: "figureResult", id: m.id, ok: true });
+        },
+        (err: unknown) => {
+          const message = err instanceof Error ? err.message : String(err);
+          canvas.replaceChildren(div("notice error", `Figure could not be rendered (${m.kind}): ${message}`));
+          vscode.postMessage({ type: "figureResult", id: m.id, ok: false, error: message });
+        },
+      );
+      break;
+    }
     case "agentText":
       if (!agentBubble) {
         agentBubble = div("message agent");

@@ -77,6 +77,10 @@ Passed to the agent at session start. All are **display-only** — they change w
 | `clear_highlight()` | Remove highlights. |
 | `show_figure(kind, content, caption)` | Render a figure in the chat pane. `kind` ∈ `vega-lite` (charts), `svg`, `mermaid` (diagrams), `image` (a PNG/SVG file path in the workspace, e.g. a matplotlib output). |
 
+**As built (M4) — figures.** `show_figure(kind, content, caption?)`: `vega-lite` (JSON spec, data inlined), `mermaid` (diagram source), `svg` (markup), `image` (workspace path; the extension sends it to the webview as a data: URI, max 15 MB). The webview renders and reports success or the error, which returns to the agent as the tool result (10 s timeout) so it can fix and retry. Vega runs with the `vega-interpreter` AST evaluator (no `eval`); Mermaid at `securityLevel: "strict"`; agent SVG is displayed as an `<img>`, where scripts cannot run.
+
+**Decided — panel content security policy (M4, Elliot).** Scripts: nonce only. Styles: `'unsafe-inline'` allowed, because Mermaid emits `<style>` elements; images and fonts only from the extension or `data:`, and no network access, so injected styles can neither run code nor send data anywhere.
+
 **Decided — MCP transport.** A tiny stdio MCP server the agent launches, relaying calls to the extension over a local socket. (ACP agents must support stdio MCP servers; HTTP support is optional.)
 
 ### 4.3 Speech vs screen
@@ -90,7 +94,8 @@ Passed to the agent at session start. All are **display-only** — they change w
 
 - **Start cue:** listening starts with an audible tone and a visible "listening" indicator in the panel (M0b showed that without a cue, speech is lost before the user knows recording began).
 - **Your turn:** a VS Code keybinding toggles listening on/off (tap to start, tap to stop). VS Code keybindings fire on key *press* only, so true hold-to-talk isn't available inside VS Code; a global hold-to-talk hotkey in the voice process is a possible later upgrade.
-- **Barge-in while the agent speaks (as built):** Silero VAD (FluidAudio, 256 ms chunks) runs only while speech is playing. On detected speech, playback **pauses at once** (no minimum-duration guard); the interruption, with 0.8 s of pre-roll, is transcribed until 0.7 s of silence (cap 20 s). `core/src/turnPolicy.ts` then decides: empty, backchannel ("mm-hmm", "yeah", "okay") or continuation ("go on") → resume; anything else → stop speech, cancel the agent's turn, and send the interruption as the new turn.
+- **Automatic interruption is off by default (Elliot, after M4).** With key-ended turns, pressing Talk already stops speech; automatic pausing mostly added false pauses (coughs, room speech). It remains available as the setting `voiceHarness.autoInterrupt`, which loads the voice-activity model only when on.
+- **Barge-in while the agent speaks (as built, when enabled):** Silero VAD (FluidAudio, 256 ms chunks) runs only while speech is playing. On detected speech, playback **pauses at once** (no minimum-duration guard); the interruption, with 0.8 s of pre-roll, is transcribed until 0.7 s of silence (cap 20 s). `core/src/turnPolicy.ts` then decides: empty, backchannel ("mm-hmm", "yeah", "okay") or continuation ("go on") → resume; anything else → stop speech, cancel the agent's turn, and send the interruption as the new turn.
 - Talk key: `Ctrl+Shift+Space` (command `voiceHarness.toggleListening`) or the 🎙 Talk button. Speaking while the agent is mid-turn replaces that turn; speech from the replaced turn is suppressed.
 - Echo: the agent's own speech must not trigger barge-in. Default assumes headphones; the setting `voiceHarness.echoCancellation` enables macOS voice processing (echo cancellation) for use with speakers.
 

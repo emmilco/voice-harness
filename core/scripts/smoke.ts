@@ -5,7 +5,30 @@ import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { AgentSession, SPEECH_LAYER, SpeechChunker, VoiceClient } from "../src/index";
+import * as vega from "vega";
+import { compile } from "vega-lite";
+import { expressionInterpreter } from "vega-interpreter";
+import { AgentSession, SPEECH_LAYER, SpeechChunker, VoiceClient, type Figure } from "../src/index";
+
+/** Validates a figure the way the panel would render it, where that is possible without a browser. */
+async function checkFigure(f: Figure): Promise<string | null> {
+  try {
+    if (f.kind === "vega-lite") {
+      const view = new vega.View(vega.parse(compile(JSON.parse(f.content)).spec, undefined, { ast: true }), {
+        expr: expressionInterpreter,
+        renderer: "none",
+      });
+      const svg = await view.toSVG();
+      return svg.startsWith("<svg") ? null : "Vega produced no SVG";
+    }
+    if (f.kind === "svg") return /^\s*(<\?xml[^>]*>\s*)?<svg[\s>]/.test(f.content) ? null : "content is not an <svg> document";
+    if (f.kind === "image") return existsSync(f.content) ? null : "image file not found";
+    return null; // mermaid needs a browser; checked in the panel only
+  } catch (err) {
+    return (err as Error).message;
+  }
+}
+let figures = 0;
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, "..", "..");
@@ -36,6 +59,7 @@ const voice = SPEAK
       modelsDirectory: "/Users/Shared/ai/models/fluidaudio",
       voice: "af_heart",
       voiceProcessing: false,
+      interruptions: false,
       onEvent: (e) => {
         if (e.event === "ready") voiceReady();
         if (e.event === "speechIdle") voiceIdle();
@@ -79,6 +103,12 @@ const session = await AgentSession.start({
       log("editor", `show_code ${path.relative(WORKSPACE, r.path)}:${r.startLine}-${r.endLine}`);
     },
     onClearHighlight: async () => log("editor", "clear_highlight"),
+    onShowFigure: async (f) => {
+      figures++;
+      const problem = await checkFigure(f);
+      log("figure", `${f.kind}${f.caption ? ` "${f.caption}"` : ""} (${f.content.length} chars) → ${problem ?? "renders"}`);
+      return problem ? { ok: false as const, error: problem } : { ok: true as const };
+    },
     onLog: () => {},
     onExit: (reason) => log("exit", reason),
   },
@@ -96,6 +126,6 @@ if (voice) {
 }
 log("claude", text.trim());
 log("turn", `stopReason=${stop}`);
-log("check", `show_code calls: ${shown}; onscreen block present: ${text.includes("```onscreen")}${voice ? `; sentences spoken: ${spoken.length}` : ""}`);
+log("check", `show_code calls: ${shown}; figures: ${figures}; onscreen block present: ${text.includes("```onscreen")}${voice ? `; sentences spoken: ${spoken.length}` : ""}`);
 session.dispose();
 process.exit(shown > 0 ? 0 : 1);

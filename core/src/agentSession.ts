@@ -3,7 +3,7 @@ import path from "node:path";
 import { Readable, Writable } from "node:stream";
 import { PROTOCOL_VERSION, client as acpClient, methods, ndJsonStream } from "@agentclientprotocol/sdk/unstable";
 import { checkBilling } from "./billingGuard";
-import { startRelay, type Relay, type RelayReply, type RelayRequest } from "./relay";
+import { startRelay, type FigureKind, type Relay, type RelayReply, type RelayRequest } from "./relay";
 
 export interface Location {
   path: string;
@@ -30,6 +30,13 @@ export interface PermissionRequest {
   options: PermissionOption[];
 }
 
+/** A figure for the front end to render. For `image`, `content` is an absolute file path inside the workspace. */
+export interface Figure {
+  kind: FigureKind;
+  content: string;
+  caption?: string;
+}
+
 export interface CodeRange {
   path: string;
   startLine: number;
@@ -45,6 +52,8 @@ export interface SessionHandlers {
   onPermission(req: PermissionRequest, signal: AbortSignal): Promise<string | null>;
   onShowCode(range: CodeRange): Promise<void>;
   onClearHighlight(): Promise<void>;
+  /** Render a figure; resolve with an error message if it could not be rendered. */
+  onShowFigure(figure: Figure): Promise<{ ok: true } | { ok: false; error: string }>;
   onLog(line: string): void;
   /** The agent process ended. */
   onExit(reason: string): void;
@@ -96,12 +105,16 @@ export class AgentSession {
     if (!billing.ok) throw new BillingGuardError(billing.problems);
 
     const relay = await startRelay(async (req: RelayRequest): Promise<RelayReply> => {
-      if (req.tool === "show_code") {
-        await handlers.onShowCode({ path: req.path, startLine: req.start_line, endLine: req.end_line });
-      } else {
-        await handlers.onClearHighlight();
+      switch (req.tool) {
+        case "show_code":
+          await handlers.onShowCode({ path: req.path, startLine: req.start_line, endLine: req.end_line });
+          return { ok: true };
+        case "clear_highlight":
+          await handlers.onClearHighlight();
+          return { ok: true };
+        case "show_figure":
+          return handlers.onShowFigure({ kind: req.kind, content: req.content, caption: req.caption });
       }
-      return { ok: true };
     });
 
     const child = spawn(opts.nodePath, [opts.agentEntry], {

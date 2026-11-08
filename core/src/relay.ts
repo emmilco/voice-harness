@@ -4,9 +4,12 @@ import os from "node:os";
 import path from "node:path";
 
 /** A display request from the MCP server, one JSON object per connection. */
+export type FigureKind = "vega-lite" | "mermaid" | "svg" | "image";
+
 export type RelayRequest =
   | { tool: "show_code"; path: string; start_line: number; end_line: number }
-  | { tool: "clear_highlight" };
+  | { tool: "clear_highlight" }
+  | { tool: "show_figure"; kind: FigureKind; content: string; caption?: string };
 
 export interface RelayReply {
   ok: boolean;

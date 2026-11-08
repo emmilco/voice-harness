@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { existsSync, realpathSync } from "node:fs";
+import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";
 import path from "node:path";
 import * as vscode from "vscode";
 import {
@@ -9,6 +9,7 @@ import {
   SpeechChunker,
   VoiceClient,
   classifyInterruption,
+  type Figure,
   type PermissionRequest,
   type VoiceEvent,
 } from "@voice-harness/core";
@@ -39,6 +40,7 @@ export class HarnessPanel implements vscode.Disposable {
   private suppressSpeech = false;
   private turn: Promise<void> | null = null;
   private readonly pendingPermissions = new Map<string, (optionId: string | null) => void>();
+  private readonly pendingFigures = new Map<string, (result: { ok: boolean; error?: string }) => void>();
   private readonly editor: EditorControl;
   private disposed = false;
 
@@ -116,6 +118,9 @@ export class HarnessPanel implements vscode.Disposable {
       case "permission":
         this.pendingPermissions.get(m.requestId)?.(m.optionId);
         break;
+      case "figureResult":
+        this.pendingFigures.get(m.id)?.({ ok: m.ok, error: m.error });
+        break;
     }
   }
 
@@ -167,6 +172,7 @@ export class HarnessPanel implements vscode.Disposable {
           onPermission: (req, signal) => this.askPermission(req, signal),
           onShowCode: (range) => this.editor.showCode(range),
           onClearHighlight: async () => this.editor.clearHighlight(),
+          onShowFigure: (figure) => this.showFigure(figure),
           onLog: (line) => this.output.appendLine(line),
           onExit: (reason) => {
             this.session = undefined;
@@ -237,6 +243,7 @@ export class HarnessPanel implements vscode.Disposable {
       modelsDirectory: config.get<string>("modelsDirectory") || "/Users/Shared/ai/models/fluidaudio",
       voice: config.get<string>("voice") || "af_heart",
       voiceProcessing: config.get<boolean>("echoCancellation", false),
+      interruptions: config.get<boolean>("autoInterrupt", false),
       onEvent: (e) => this.onVoiceEvent(e),
       onExit: (reason) => {
         this.voice = undefined;
@@ -366,6 +373,41 @@ export class HarnessPanel implements vscode.Disposable {
     this.post({ type: "voice", state: this.voiceState, speak: this.speakReplies, microphone: this.microphone, detail: this.voiceDetail });
   }
 
+  // MARK: Figures
+
+  private static readonly IMAGE_TYPES: Record<string, string> = {
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".gif": "image/gif",
+    ".webp": "image/webp",
+    ".svg": "image/svg+xml",
+  };
+  private static readonly MAX_IMAGE_BYTES = 15 * 1024 * 1024;
+
+  /** Sends a figure to the webview and waits (up to 10 s) for it to report whether it rendered. */
+  private async showFigure(figure: Figure): Promise<{ ok: true } | { ok: false; error: string }> {
+    let content = figure.content;
+    if (figure.kind === "image") {
+      const type = HarnessPanel.IMAGE_TYPES[path.extname(figure.content).toLowerCase()];
+      if (!type) return { ok: false, error: "unsupported image type" };
+      if (!existsSync(figure.content)) return { ok: false, error: `no such file: ${figure.content}` };
+      if (statSync(figure.content).size > HarnessPanel.MAX_IMAGE_BYTES) return { ok: false, error: "image is larger than 15 MB" };
+      content = `data:${type};base64,${readFileSync(figure.content).toString("base64")}`;
+    }
+    const id = randomBytes(8).toString("hex");
+    const result = await new Promise<{ ok: boolean; error?: string }>((resolve) => {
+      const finish = (r: { ok: boolean; error?: string }) => {
+        if (!this.pendingFigures.delete(id)) return;
+        resolve(r);
+      };
+      this.pendingFigures.set(id, finish);
+      setTimeout(() => finish({ ok: false, error: "the panel did not report rendering within 10 s" }), 10_000);
+      this.post({ type: "figure", id, kind: figure.kind, content, caption: figure.caption });
+    });
+    return result.ok ? { ok: true } : { ok: false, error: result.error ?? "rendering failed" };
+  }
+
   // MARK: Permissions
 
   private askPermission(req: PermissionRequest, signal: AbortSignal): Promise<string | null> {
@@ -401,7 +443,7 @@ export class HarnessPanel implements vscode.Disposable {
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource}; script-src 'nonce-${nonce}'; img-src ${webview.cspSource} data:;">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}'; img-src ${webview.cspSource} data:; font-src ${webview.cspSource} data:;">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <link rel="stylesheet" href="${asset("webview.css")}">
 <title>Voice Harness</title>
@@ -434,6 +476,7 @@ export class HarnessPanel implements vscode.Disposable {
     this.disposed = true;
     HarnessPanel.current = undefined;
     this.resolveAllPermissions();
+    for (const finish of [...this.pendingFigures.values()]) finish({ ok: false, error: "the panel was closed" });
     this.session?.dispose();
     this.voice?.dispose();
     this.editor.dispose();

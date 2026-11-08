@@ -63,6 +63,42 @@ server.registerTool(
   },
 );
 
+const IMAGE_EXTENSIONS = new Set([".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg"]);
+
+server.registerTool(
+  "show_figure",
+  {
+    description:
+      "Show Elliot a figure in the chat panel, beside the conversation. Use it whenever a picture explains better than words: " +
+      "charts of numbers (loss curves, distributions, comparisons), diagrams of structure or flow (architectures, data paths), " +
+      "or images your code produced. Kinds: " +
+      "'vega-lite' — content is a Vega-Lite JSON spec with data inlined under data.values (no URLs; the panel has no network); " +
+      "'mermaid' — content is Mermaid diagram source (flowchart, sequenceDiagram, classDiagram, …); " +
+      "'svg' — content is a complete <svg> document; " +
+      "'image' — content is the path of a PNG, JPEG, GIF, WebP or SVG file in the workspace (for example a matplotlib savefig output). " +
+      "If rendering fails the error comes back as this tool's result; fix the figure and call again. Display-only; never changes files.",
+    inputSchema: {
+      kind: z.enum(["vega-lite", "mermaid", "svg", "image"]),
+      content: z.string().describe("The spec, diagram source, SVG markup, or image file path, according to kind"),
+      caption: z.string().optional().describe("One short line shown under the figure"),
+    },
+  },
+  async ({ kind, content, caption }) => {
+    let payload = content;
+    if (kind === "image") {
+      const resolved = path.resolve(WORKSPACE, content);
+      if (resolved !== WORKSPACE && !resolved.startsWith(WORKSPACE + path.sep)) {
+        return { isError: true, content: [{ type: "text" as const, text: "Image path is outside the workspace." }] };
+      }
+      if (!IMAGE_EXTENSIONS.has(path.extname(resolved).toLowerCase())) {
+        return { isError: true, content: [{ type: "text" as const, text: "Image must be .png, .jpg, .jpeg, .gif, .webp or .svg." }] };
+      }
+      payload = resolved;
+    }
+    return result(await relay({ tool: "show_figure", kind, content: payload, caption }), "Shown to Elliot.");
+  },
+);
+
 server.registerTool(
   "clear_highlight",
   {

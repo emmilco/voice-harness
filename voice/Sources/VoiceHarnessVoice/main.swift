@@ -2,7 +2,10 @@
 // Silero voice activity detection for interruptions. Commands arrive as JSON
 // lines on stdin; events leave as JSON lines on stdout (see Protocol.swift).
 //
-//   VoiceHarnessVoice --models <dir> [--voice af_heart] [--voice-processing] [--no-mic]
+//   VoiceHarnessVoice --models <dir> [--voice af_heart] [--voice-processing] [--no-mic] [--interruptions]
+//
+// --interruptions: while speech plays, detect the user starting to talk and pause (barge-in).
+// Without it, speech stops only on an explicit listenStart or stopSpeaking.
 import AVFAudio
 import AVFoundation
 import FluidAudio
@@ -19,6 +22,7 @@ let modelsDirectory = URL(fileURLWithPath: argument("--models") ?? "/Users/Share
 let voice = argument("--voice") ?? "af_heart"
 let voiceProcessing = CommandLine.arguments.contains("--voice-processing")
 let wantMic = !CommandLine.arguments.contains("--no-mic")
+let wantInterruptions = CommandLine.arguments.contains("--interruptions")
 
 Events.emit("loading")
 let startedAt = Date()
@@ -44,7 +48,7 @@ do {
 }
 
 var vad: VadManager?
-if micAvailable {
+if micAvailable && wantInterruptions {
     do {
         vad = try await VadManager(modelDirectory: modelsDirectory)
     } catch {

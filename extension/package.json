@@ -57,6 +57,11 @@
           "type": "string",
           "default": "/Users/Shared/ai/models/fluidaudio",
           "description": "Model store holding the FluidAudio models (MLP-governed)."
+        },
+        "voiceHarness.autoInterrupt": {
+          "type": "boolean",
+          "default": false,
+          "description": "Pause Claude's speech automatically when you start talking over it. Off: speech stops only when you press Talk or Stop. Takes effect when the panel is reopened."
         }
       }
     },
@@ -73,7 +78,12 @@
   },
   "dependencies": {
     "@voice-harness/core": "0.1.0",
-    "markdown-it": "15.0.3"
+    "markdown-it": "15.0.3",
+    "mermaid": "12.3.0",
+    "vega": "6.4.0",
+    "vega-embed": "7.3.0",
+    "vega-interpreter": "2.3.2",
+    "vega-lite": "6.5.0"
   },
   "devDependencies": {
     "@types/markdown-it": "14.2.0",

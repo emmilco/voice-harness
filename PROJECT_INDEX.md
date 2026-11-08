@@ -15,14 +15,14 @@ voice-harness/
 │   │   ├── agentSession.ts  # ACP session with claude-agent-acp: start, prompt, cancel, handlers
 │   │   ├── billingGuard.ts  # refuses per-token billing configurations
 │   │   ├── relay.ts         # Unix-socket relay from the MCP server to the front end
-│   │   ├── mcpServer.ts     # stdio MCP server: show_code, clear_highlight (bundled to extension/dist)
+│   │   ├── mcpServer.ts     # stdio MCP server: show_code, clear_highlight, show_figure (bundled to extension/dist)
 │   │   ├── speechLayer.ts   # system-prompt text appended to Claude Code's standard prompt
 │   │   ├── speechText.ts    # SpeechChunker: streamed markdown → speakable sentences (skips fences, tables)
 │   │   ├── turnPolicy.ts    # classifyInterruption: resume vs new turn
 │   │   ├── voiceClient.ts   # spawns the voice process; JSON-lines protocol
 │   │   └── index.ts         # public exports
 │   └── scripts/
-│       ├── smoke.ts         # headless one-turn agent test (`npm run smoke`; `--speak` also speaks the reply)
+│       ├── smoke.ts         # headless one-turn agent test (`npm run smoke`; `--speak` speaks the reply; Vega-Lite figures validated headlessly)
 │       └── unit.ts          # unit tests for chunker and policy (`npm run unit`)
 ├── extension/         # VS Code extension (thin presentation layer)
 │   ├── package.json   # extension manifest: commands, settings
@@ -33,7 +33,7 @@ voice-harness/
 │   │   ├── editorControl.ts # show_code highlight and follow-along reveal
 │   │   ├── protocol.ts      # extension ↔ webview message types
 │   │   └── toolchain.ts     # resolves node / claude via settings or a login shell
-│   └── webview/       # main.ts (chat UI, markdown-it, `onscreen` blocks), style.css
+│   └── webview/       # main.ts (chat UI, markdown-it, `onscreen` blocks), figures.ts (Vega-Lite, Mermaid, SVG, images), style.css
 ├── voice/             # Swift voice process (SwiftPM; FluidAudio pinned exactly)
 │   └── Sources/VoiceHarnessVoice/
 │       ├── main.swift          # startup: mic permission, Kokoro warm-up, VAD, speech assets, command loop

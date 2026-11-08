@@ -15,6 +15,7 @@ export type ToWebview =
   | { type: "tool"; id: string; title?: string; kind?: string; status?: string; isUpdate: boolean }
   | { type: "permission"; requestId: string; title: string; kind?: string; options: { optionId: string; name: string; kind: string }[] }
   | { type: "permissionDone"; requestId: string }
+  | { type: "figure"; id: string; kind: "vega-lite" | "mermaid" | "svg" | "image"; content: string; caption?: string }
   | { type: "notice"; text: string }
   | { type: "error"; text: string };
 
@@ -25,4 +26,5 @@ export type FromWebview =
   | { type: "restart" }
   | { type: "talk" }
   | { type: "toggleSpeak" }
-  | { type: "permission"; requestId: string; optionId: string | null };
+  | { type: "permission"; requestId: string; optionId: string | null }
+  | { type: "figureResult"; id: string; ok: boolean; error?: string };
