@@ -96,6 +96,9 @@ const session = await AgentSession.start({
       if (voice) say(chunker.push(c));
     },
     onToolCall: (t, isUpdate) => {
+      if (process.env.VH_LOG_RAW && /explain_code/.test(t.title ?? "")) {
+        log("raw", `${isUpdate ? "update" : "announce"} ${t.id.slice(-6)} status=${t.status} input=${JSON.stringify(t.rawInput ?? null).slice(0, 90)}`);
+      }
       if (!isUpdate && voice) say(chunker.flush());
       if (!isUpdate) log("tool", `${t.title} [${t.kind}]${t.locations.length ? " @ " + t.locations.map((l) => `${path.basename(l.path)}:${l.line ?? "?"}`).join(", ") : ""}`);
     },

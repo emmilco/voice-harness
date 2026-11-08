@@ -16,6 +16,8 @@ export interface ToolCallInfo {
   kind?: string;
   status?: string;
   locations: Location[];
+  /** The tool's input as the agent reported it, when available. */
+  rawInput?: unknown;
 }
 
 export interface PermissionOption {
@@ -160,7 +162,14 @@ export class AgentSession {
             break;
           case "tool_call":
             handlers.onToolCall(
-              { id: u.toolCallId, title: u.title, kind: u.kind ?? undefined, status: u.status ?? undefined, locations: toLocations(u.locations) },
+              {
+                id: u.toolCallId,
+                title: u.title,
+                kind: u.kind ?? undefined,
+                status: u.status ?? undefined,
+                locations: toLocations(u.locations),
+                rawInput: u.rawInput ?? undefined,
+              },
               false,
             );
             break;
@@ -172,6 +181,7 @@ export class AgentSession {
                 kind: u.kind ?? undefined,
                 status: u.status ?? undefined,
                 locations: toLocations(u.locations),
+                rawInput: u.rawInput ?? undefined,
               },
               true,
             );

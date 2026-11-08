@@ -88,3 +88,15 @@ Hypothesis: a structural tool, explain_code(path, start, end, say, step), pairs 
 Tried: added explain_code (MCP tool, StepSequencer ordering, panel step bubble, marker-timed highlight then spoken words); two text-only walkthrough runs; one spoken run logging marker and playback times.
 Outcome: both text runs: 5 numbered explain_code steps (lines 14-15, 16, 17, 18, 19), each with its own sentences. Calls were issued in parallel, so all five executed together once generation finished (~12-15 s). Spoken run: each highlight applied exactly when the previous step's last sentence finished (26.9 s, 42.4 s, 52.5 s, 65.5 s), immediately before that step's words.
 Learning: attention now moves with the explanation. Remaining cost: a walkthrough's first step waits for the whole batch to be generated (a lead-in sentence, then ~4 s of silence here). Possible later improvement: present steps from the streamed tool-call announcement instead of waiting for execution. Closed.
+
+## Attempt 16 — 2026-11-08 01:40:00
+Hypothesis: ACP tool-call announcements carry explain_code inputs, so a walkthrough step can be presented when announced instead of when the batch executes.
+Tried: passed rawInput through ToolCallInfo; logged announcements and updates for explain_code in a walkthrough run.
+Outcome: four announcements at 8.5, 9.9, 11.6, 13.2 s, each with rawInput {}; no update carried input before all four executed together at 14.7 s.
+Learning: premise false — the adapter does not stream tool inputs; presenting from announcements is impossible. The 1.5 s spacing shows the calls are generated sequentially within one message and run only when the message completes. Next candidate H-serial: instructing one explain_code call per message (wait for each result) makes each step execute as soon as it is written. Falsified if steps still execute together.
+
+## Attempt 17 — 2026-11-08 01:55:00
+Hypothesis: H-serial — one explain_code call per message makes each step execute as soon as it is written.
+Tried: speech-layer instruction to make walkthrough calls one at a time; two walkthrough runs logging announcement and execution times.
+Outcome: both runs: each step executed ~1.2-1.5 s after its announcement (steps at 9.7, 12.0, 14.2, 17.2, 19.6 s; and 9.8, 12.4, 14.7, 17.0, 19.2 s). First step 9.7-9.8 s vs 14.7-15.1 s when batched.
+Learning: H-serial supported (2/2): walkthroughs start ~5 s sooner; later steps arrive every ~2.3 s, faster than each step's speech, so playback is continuous. Closed.
