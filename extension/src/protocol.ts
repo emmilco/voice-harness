@@ -47,7 +47,7 @@ export type ToWebview =
   | { type: "options"; options: { id: string; name: string; current: string; choices: { value: string; name: string; description?: string }[] }[] }
   | { type: "usage"; used: number; size: number }
   | { type: "title"; title: string }
-  | { type: "queued"; id: string; text: string }
+  | { type: "queued"; id: string; text: string; images: number }
   | { type: "dequeued"; id: string }
   | { type: "commands"; commands: { name: string; description: string; hint?: string }[] }
   | { type: "notice"; text: string }
@@ -55,7 +55,7 @@ export type ToWebview =
 
 export type FromWebview =
   | { type: "ready" }
-  | { type: "send"; text: string }
+  | { type: "send"; text: string; images?: { mimeType: string; data: string }[] }
   | { type: "stop" }
   | { type: "restart" }
   | { type: "talk" }

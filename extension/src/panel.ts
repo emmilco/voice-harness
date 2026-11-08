@@ -70,7 +70,7 @@ export class HarnessPanel implements vscode.Disposable {
   private turn: Promise<void> | null = null;
   private fileList: { files: string[]; at: number } | undefined;
   /** Typed messages waiting for the running turn to finish, oldest first. */
-  private readonly queue: { id: string; text: string }[] = [];
+  private readonly queue: { id: string; text: string; images: { mimeType: string; data: string }[] }[] = [];
   private readonly pendingPermissions = new Map<string, (optionId: string | null) => void>();
   private readonly pendingFigures = new Map<string, (result: { ok: boolean; error?: string }) => void>();
   /** Live charts following their data files, oldest first. */
@@ -148,8 +148,8 @@ export class HarnessPanel implements vscode.Disposable {
         await this.startSession();
         break;
       case "send":
-        if (this.turn) this.enqueue(m.text);
-        else await this.send(m.text, false);
+        if (this.turn) this.enqueue(m.text, m.images ?? []);
+        else await this.send(m.text, false, m.images ?? []);
         break;
       case "listFiles":
         this.post({ type: "files", files: await this.workspaceFiles() });
@@ -159,7 +159,7 @@ export class HarnessPanel implements vscode.Disposable {
         break;
       case "sendNow": {
         const item = this.removeQueued(m.id);
-        if (item) await this.send(item.text, false);
+        if (item) await this.send(item.text, false, item.images);
         break;
       }
       case "stop":
@@ -378,7 +378,7 @@ export class HarnessPanel implements vscode.Disposable {
   }
 
   /** Starts a user turn, cancelling (and silencing) any turn still running. */
-  private async send(text: string, spoken: boolean): Promise<void> {
+  private async send(text: string, spoken: boolean, images: { mimeType: string; data: string }[] = []): Promise<void> {
     if (!this.session) return;
     this.awaitingReply = false;
     if (this.autoTurn.running) this.cancelListening();
@@ -396,14 +396,17 @@ export class HarnessPanel implements vscode.Disposable {
         ? this.tracker.current()
         : undefined;
     const prompt = context ? `${formatEditorContext(context)}\n\n${text}` : text;
-    const attachments = this.mentionedFiles(text);
+    const attachments: Attachment[] = [
+      ...this.mentionedFiles(text),
+      ...images.map((i) => ({ kind: "image" as const, mimeType: i.mimeType, data: i.data })),
+    ];
     this.post({ type: "partial", text: "", source: null });
     this.post({
       type: "user",
       text,
       spoken,
       context: context ? editorContextLabel(context) : undefined,
-      attachments: attachments.map((a) => (a.kind === "file" ? path.relative(this.workspace, a.path) : "image")),
+      attachments: attachments.map((a) => (a.kind === "file" ? path.relative(this.workspace, a.path) : "pasted image")),
     });
     this.post({ type: "state", state: "busy" });
     // `turn` is read in `finally`, which always runs after this assignment completes.
@@ -427,7 +430,7 @@ export class HarnessPanel implements vscode.Disposable {
           this.awaitingReply = false;
           const next = this.queue.shift()!;
           this.post({ type: "dequeued", id: next.id });
-          setTimeout(() => void this.send(next.text, false), 0);
+          setTimeout(() => void this.send(next.text, false, next.images), 0);
         }
       }
     })();
@@ -459,13 +462,13 @@ export class HarnessPanel implements vscode.Disposable {
     return out;
   }
 
-  private enqueue(text: string): void {
+  private enqueue(text: string, images: { mimeType: string; data: string }[]): void {
     const id = randomBytes(6).toString("hex");
-    this.queue.push({ id, text });
-    this.post({ type: "queued", id, text });
+    this.queue.push({ id, text, images });
+    this.post({ type: "queued", id, text, images: images.length });
   }
 
-  private removeQueued(id: string): { id: string; text: string } | undefined {
+  private removeQueued(id: string): { id: string; text: string; images: { mimeType: string; data: string }[] } | undefined {
     const index = this.queue.findIndex((q) => q.id === id);
     if (index < 0) return undefined;
     const [item] = this.queue.splice(index, 1);

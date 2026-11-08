@@ -102,6 +102,59 @@ completer.addSource((text, caret) => {
   const items = scored.slice(0, 50).map(({ f }) => ({ label: f.slice(f.lastIndexOf("/") + 1), detail: f, insert: `@${f} ` }));
   return { start: caret - m[1].length - 1, items };
 });
+const MAX_IMAGES = 5;
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+const pendingImages: { mimeType: string; data: string; url: string }[] = [];
+const imageTray = document.createElement("div");
+imageTray.className = "image-tray";
+input.parentElement!.insertBefore(imageTray, input);
+
+function renderImageTray(): void {
+  imageTray.replaceChildren();
+  pendingImages.forEach((img, i) => {
+    const thumb = document.createElement("div");
+    thumb.className = "thumb";
+    const pic = document.createElement("img");
+    pic.src = img.url;
+    const remove = document.createElement("button");
+    remove.className = "thumb-remove";
+    remove.textContent = "✕";
+    remove.title = "Remove image";
+    remove.addEventListener("click", () => {
+      pendingImages.splice(i, 1);
+      renderImageTray();
+    });
+    thumb.append(pic, remove);
+    imageTray.appendChild(thumb);
+  });
+}
+
+function addImage(file: File): void {
+  if (!file.type.startsWith("image/")) return;
+  if (pendingImages.length >= MAX_IMAGES) return void append(div("notice", `At most ${MAX_IMAGES} images per message.`));
+  if (file.size > MAX_IMAGE_BYTES) return void append(div("notice", "Images over 5 MB are not attached."));
+  const reader = new FileReader();
+  reader.onload = () => {
+    const url = String(reader.result);
+    pendingImages.push({ mimeType: file.type, data: url.slice(url.indexOf(",") + 1), url });
+    renderImageTray();
+  };
+  reader.readAsDataURL(file);
+}
+
+input.addEventListener("paste", (e) => {
+  const images = [...(e.clipboardData?.files ?? [])].filter((f) => f.type.startsWith("image/"));
+  if (!images.length) return;
+  e.preventDefault();
+  images.forEach(addImage);
+});
+input.addEventListener("dragover", (e) => e.preventDefault());
+input.addEventListener("drop", (e) => {
+  const images = [...(e.dataTransfer?.files ?? [])].filter((f) => f.type.startsWith("image/"));
+  if (!images.length) return;
+  e.preventDefault();
+  images.forEach(addImage);
+});
 let voiceUsable = false;
 let voiceText = "";
 const meter = document.createElement("span");
@@ -176,9 +229,11 @@ function updateControls(): void {
 
 function send(): void {
   const text = input.value.trim();
-  if (!text || !ready) return;
+  if ((!text && !pendingImages.length) || !ready) return;
   input.value = "";
-  vscode.postMessage({ type: "send", text });
+  const images = pendingImages.splice(0).map(({ mimeType, data }) => ({ mimeType, data }));
+  renderImageTray();
+  vscode.postMessage({ type: "send", text: text || "(see attached image)", images });
 }
 
 window.addEventListener("message", (event: MessageEvent<ToWebview>) => {
@@ -284,7 +339,7 @@ window.addEventListener("message", (event: MessageEvent<ToWebview>) => {
       break;
     }
     case "queued": {
-      const bubble = div("message user queued", m.text);
+      const bubble = div("message user queued", m.text + (m.images ? `  (+${m.images} image${m.images > 1 ? "s" : ""})` : ""));
       const bar = div("queued-bar");
       bar.appendChild(div("queued-label", "queued — sends when Claude finishes"));
       const now = document.createElement("button");

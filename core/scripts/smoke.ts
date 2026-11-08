@@ -2,13 +2,13 @@
 // Requires `npm run build` (for the bundled MCP server).
 // Permission policy: allow the harness display tools, reject everything else.
 import { execFileSync } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import * as vega from "vega";
 import { compile } from "vega-lite";
 import { expressionInterpreter } from "vega-interpreter";
-import { AgentSession, SPEECH_LAYER, SpeechChunker, VoiceClient, type Figure } from "../src/index";
+import { AgentSession, SPEECH_LAYER, SpeechChunker, VoiceClient, type Attachment, type Figure } from "../src/index";
 
 /** Validates a figure the way the panel would render it, where that is possible without a browser. */
 async function checkFigure(f: Figure): Promise<string | null> {
@@ -156,7 +156,11 @@ await session.setConfigOption("mode", "default");
 log("session", `${session.sessionId} (${session.loginSummary}); options: ${session.configOptions.map((o) => `${o.id}=${o.current}`).join(", ")}`);
 
 // VH_ATTACH: comma-separated workspace files to attach as resource links.
-const attachments = (process.env.VH_ATTACH ?? "").split(",").filter(Boolean).map((f) => ({ kind: "file" as const, path: path.resolve(WORKSPACE, f) }));
+// VH_ATTACH_IMAGE: a PNG file to attach as an image.
+const attachments: Attachment[] = (process.env.VH_ATTACH ?? "").split(",").filter(Boolean).map((f) => ({ kind: "file" as const, path: path.resolve(WORKSPACE, f) }));
+if (process.env.VH_ATTACH_IMAGE) {
+  attachments.push({ kind: "image", mimeType: "image/png", data: readFileSync(process.env.VH_ATTACH_IMAGE).toString("base64") });
+}
 const stop = await session.prompt(PROMPT, attachments);
 if (voice) {
   say(chunker.flush());

@@ -315,3 +315,9 @@ body.vscode-light .hljs-title, body.vscode-light .hljs-title.function_, body.vsc
 body.vscode-light .hljs-title.class_, body.vscode-light .hljs-type { color: #267f99; }
 body.vscode-light .hljs-variable, body.vscode-light .hljs-params, body.vscode-light .hljs-attr, body.vscode-light .hljs-property { color: #001080; }
 body.vscode-light .hljs-deletion { color: #a31515; }
+
+.image-tray { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 6px; }
+.image-tray:empty { display: none; }
+.thumb { position: relative; width: 56px; height: 56px; border-radius: 4px; overflow: hidden; border: 1px solid var(--vscode-panel-border); }
+.thumb img { width: 100%; height: 100%; object-fit: cover; }
+.thumb-remove { position: absolute; top: 1px; right: 1px; padding: 0 4px; font-size: 0.75em; line-height: 1.3; }
