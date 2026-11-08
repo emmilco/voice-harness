@@ -193,3 +193,31 @@ button.listening {
   color: var(--vscode-descriptionForeground);
 }
 .figure.live .figure-caption::before { content: "● live  "; color: var(--vscode-charts-green); }
+
+.session-menu {
+  margin: 0 12px 8px;
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 6px;
+  background: var(--vscode-editor-background);
+  max-height: 45vh;
+  display: flex;
+  flex-direction: column;
+}
+.session-menu[hidden] { display: none; }
+.session-menu-head {
+  display: flex; gap: 6px; align-items: center;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--vscode-panel-border);
+  font-size: 0.9em; color: var(--vscode-descriptionForeground);
+}
+.session-menu-head span { flex: 1; }
+.session-list { overflow-y: auto; }
+.session-item {
+  display: flex; width: 100%; gap: 8px; justify-content: space-between;
+  padding: 6px 10px; border-radius: 0; text-align: left;
+  background: transparent; color: var(--vscode-foreground);
+}
+.session-item:hover:not(:disabled) { background: var(--vscode-list-hoverBackground); }
+.session-item.current { opacity: 0.6; }
+.session-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.session-time { flex-shrink: 0; font-size: 0.85em; color: var(--vscode-descriptionForeground); }

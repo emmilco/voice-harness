@@ -26,6 +26,19 @@ const talkButton = document.getElementById("talk") as HTMLButtonElement;
 const speakButton = document.getElementById("speak") as HTMLButtonElement;
 const voiceChip = document.getElementById("voice")!;
 const partial = document.getElementById("partial")!;
+const sessionMenu = document.getElementById("session-menu")!;
+const sessionList = document.getElementById("session-list")!;
+
+function relativeTime(iso?: string): string {
+  if (!iso) return "";
+  const minutes = Math.round((Date.now() - Date.parse(iso)) / 60000);
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes} min ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours} h ago`;
+  const days = Math.round(hours / 24);
+  return days < 30 ? `${days} d ago` : new Date(iso).toLocaleDateString();
+}
 
 const VOICE_LABELS: Record<string, string> = {
   loading: "Voice loading…",
@@ -151,6 +164,33 @@ window.addEventListener("message", (event: MessageEvent<ToWebview>) => {
     case "notice":
       append(div("notice", m.text));
       break;
+    case "clear":
+      endAgentMessage();
+      log.replaceChildren();
+      toolRows.clear();
+      permissionCards.clear();
+      liveCharts.clear();
+      earlyRows.clear();
+      sessionMenu.hidden = true;
+      break;
+    case "sessions": {
+      sessionList.replaceChildren();
+      if (!m.items.length) sessionList.appendChild(div("notice", "No conversations yet."));
+      for (const item of m.items) {
+        const row = document.createElement("button");
+        row.className = "session-item" + (item.id === m.currentId ? " current" : "");
+        row.appendChild(div("session-title", item.title));
+        row.appendChild(div("session-time", item.id === m.currentId ? "current" : relativeTime(item.updatedAt)));
+        row.disabled = item.id === m.currentId;
+        row.addEventListener("click", () => {
+          sessionMenu.hidden = true;
+          vscode.postMessage({ type: "loadSession", id: item.id });
+        });
+        sessionList.appendChild(row);
+      }
+      sessionMenu.hidden = false;
+      break;
+    }
     case "step": {
       endAgentMessage();
       const bubble = div("message agent step");
@@ -267,6 +307,18 @@ input.addEventListener("keydown", (e) => {
 sendButton.addEventListener("click", send);
 stopButton.addEventListener("click", () => vscode.postMessage({ type: "stop" }));
 talkButton.addEventListener("click", () => vscode.postMessage({ type: "talk" }));
+document.getElementById("sessions")!.addEventListener("click", () => {
+  if (!sessionMenu.hidden) {
+    sessionMenu.hidden = true;
+    return;
+  }
+  vscode.postMessage({ type: "listSessions" });
+});
+document.getElementById("session-close")!.addEventListener("click", () => (sessionMenu.hidden = true));
+document.getElementById("session-new")!.addEventListener("click", () => {
+  sessionMenu.hidden = true;
+  vscode.postMessage({ type: "newSession" });
+});
 speakButton.addEventListener("click", () => vscode.postMessage({ type: "toggleSpeak" }));
 restartButton.addEventListener("click", () => {
   endAgentMessage();

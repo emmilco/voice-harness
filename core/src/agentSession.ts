@@ -62,8 +62,18 @@ export interface ExplainStep {
 }
 
 /** Callbacks through which a front end (VS Code, a test script) presents the session. */
+/** A past conversation that can be loaded. */
+export interface SessionSummary {
+  id: string;
+  title?: string;
+  /** ISO 8601 time of the last activity, when known. */
+  updatedAt?: string;
+}
+
 export interface SessionHandlers {
   onText(chunk: string): void;
+  /** Text of a user message, reported while a loaded session's history is replayed. */
+  onUserText?(chunk: string): void;
   /** A new tool call (`isUpdate` false) or a change to one already reported. */
   onToolCall(info: ToolCallInfo, isUpdate: boolean): void;
   /** Resolve with the chosen optionId, or null to cancel. `signal` aborts when the turn is cancelled. */
@@ -95,6 +105,8 @@ export interface SessionOptions {
   /** Text appended to Claude Code's standard system prompt. */
   systemPromptAppend: string;
   handlers: SessionHandlers;
+  /** Load (and replay) this past session instead of starting a new one. */
+  loadSessionId?: string;
 }
 
 export class BillingGuardError extends Error {
@@ -104,6 +116,8 @@ export class BillingGuardError extends Error {
 }
 
 type AgentConnection = ReturnType<ReturnType<typeof acpClient>["connect"]>;
+type McpServers = { name: string; command: string; args: string[]; env: { name: string; value: string }[] }[];
+type SystemPromptParam = { mode: "append"; content: { type: "text"; text: string }[] };
 
 /**
  * One ACP session with claude-agent-acp, on the claude.ai subscription, with the
@@ -117,9 +131,14 @@ export class AgentSession {
     private readonly child: ChildProcess,
     private readonly connection: AgentConnection,
     private readonly relay: Relay,
-    readonly sessionId: string,
+    private readonly sessionSetup: { cwd: string; mcpServers: McpServers; systemPrompt: SystemPromptParam },
+    private currentSessionId: string,
     readonly loginSummary: string,
   ) {}
+
+  get sessionId(): string {
+    return this.currentSessionId;
+  }
 
   static async start(opts: SessionOptions): Promise<AgentSession> {
     const { handlers } = opts;
@@ -172,6 +191,9 @@ export class AgentSession {
           case "agent_message_chunk":
             if (u.content.type === "text") handlers.onText(u.content.text);
             break;
+          case "user_message_chunk":
+            if (u.content.type === "text") handlers.onUserText?.(u.content.text);
+            break;
           case "tool_call":
             handlers.onToolCall(
               {
@@ -223,7 +245,7 @@ export class AgentSession {
         protocolVersion: PROTOCOL_VERSION,
         clientCapabilities: { fs: { readTextFile: false, writeTextFile: false }, terminal: false },
       });
-      const created = await agent.request(methods.agent.session.new, {
+      const setup = {
         cwd: opts.workspace,
         mcpServers: [
           {
@@ -236,15 +258,44 @@ export class AgentSession {
             ],
           },
         ],
-        systemPrompt: { mode: "append", content: [{ type: "text", text: opts.systemPromptAppend }] },
-      });
-      session = new AgentSession(child, connection, relay, created.sessionId, billing.summary);
+        systemPrompt: { mode: "append" as const, content: [{ type: "text" as const, text: opts.systemPromptAppend }] },
+      };
+      let sessionId: string;
+      if (opts.loadSessionId) {
+        await agent.request(methods.agent.session.load, { ...setup, sessionId: opts.loadSessionId });
+        sessionId = opts.loadSessionId;
+      } else {
+        const created = (await agent.request(methods.agent.session.new, { ...setup })) as { sessionId: string };
+        sessionId = created.sessionId;
+      }
+      session = new AgentSession(child, connection, relay, setup, sessionId, billing.summary);
       return session;
     } catch (err) {
       child.kill("SIGTERM");
       relay.close();
       throw err;
     }
+  }
+
+  /** This folder's past sessions, most recently active first (up to `limit`). */
+  async list(limit = 50): Promise<SessionSummary[]> {
+    const out: SessionSummary[] = [];
+    let cursor: string | undefined;
+    do {
+      const page = await this.connection.agent.request(methods.agent.session.list, { cwd: this.sessionSetup.cwd, cursor });
+      for (const s of page.sessions) out.push({ id: s.sessionId, title: s.title ?? undefined, updatedAt: s.updatedAt ?? undefined });
+      cursor = page.nextCursor ?? undefined;
+    } while (cursor && out.length < limit);
+    return out
+      .sort((a, b) => (b.updatedAt ?? "").localeCompare(a.updatedAt ?? ""))
+      .slice(0, limit);
+  }
+
+  /** Switches to a past session; its history is replayed through the handlers before this resolves. */
+  async load(sessionId: string): Promise<void> {
+    if (this.turnAbort) this.cancel();
+    await this.connection.agent.request(methods.agent.session.load, { ...this.sessionSetup, sessionId });
+    this.currentSessionId = sessionId;
   }
 
   /** Sends one user turn; resolves with the stop reason when the turn ends. */

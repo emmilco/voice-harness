@@ -18,6 +18,8 @@ export type ToWebview =
   | { type: "step"; file: string; startLine: number; endLine: number; text: string }
   | { type: "figure"; id: string; kind: "vega-lite" | "mermaid" | "svg" | "image"; content: string; caption?: string; live?: boolean }
   | { type: "figureData"; id: string; rows: Record<string, unknown>[] }
+  | { type: "sessions"; items: { id: string; title: string; updatedAt?: string }[]; currentId?: string }
+  | { type: "clear" }
   | { type: "notice"; text: string }
   | { type: "error"; text: string };
 
@@ -29,4 +31,7 @@ export type FromWebview =
   | { type: "talk" }
   | { type: "toggleSpeak" }
   | { type: "permission"; requestId: string; optionId: string | null }
-  | { type: "figureResult"; id: string; ok: boolean; error?: string };
+  | { type: "figureResult"; id: string; ok: boolean; error?: string }
+  | { type: "listSessions" }
+  | { type: "loadSession"; id: string }
+  | { type: "newSession" };

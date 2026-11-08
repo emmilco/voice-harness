@@ -45,6 +45,10 @@ export class HarnessPanel implements vscode.Disposable {
   private speakReplies: boolean;
   private readonly chunker = new SpeechChunker();
   private readonly steps = new StepSequencer<ExplainStep>((step) => this.presentStep(step));
+  /** True while a loaded session's history is replayed: shown, not spoken, no editor effects. */
+  private replaying = false;
+  /** User text of the replayed message currently being assembled. */
+  private replayUser = "";
   /** True from a cancel (or the start of listening) until the next turn starts. */
   private suppressSpeech = false;
   private turn: Promise<void> | null = null;
@@ -136,12 +140,22 @@ export class HarnessPanel implements vscode.Disposable {
       case "figureResult":
         this.pendingFigures.get(m.id)?.({ ok: m.ok, error: m.error });
         break;
+      case "listSessions":
+        await this.listSessions();
+        break;
+      case "loadSession":
+        await this.loadSession(m.id);
+        break;
+      case "newSession":
+        this.post({ type: "clear" });
+        await this.startSession();
+        break;
     }
   }
 
   // MARK: Agent session
 
-  private async startSession(): Promise<void> {
+  private async startSession(loadSessionId?: string): Promise<void> {
     this.session?.dispose();
     this.session = undefined;
     this.turn = null;
@@ -174,13 +188,20 @@ export class HarnessPanel implements vscode.Disposable {
         agentEntry,
         mcpServerScript,
         systemPromptAppend: SPEECH_LAYER,
+        loadSessionId,
         handlers: {
           onText: (chunk) => {
+            this.flushReplayedUser();
             this.post({ type: "agentText", chunk });
-            this.speak(this.chunker.push(chunk));
+            if (!this.replaying) this.speak(this.chunker.push(chunk));
+          },
+          onUserText: (chunk) => {
+            if (this.replaying) this.replayUser += chunk;
           },
           onToolCall: (t, isUpdate) => {
+            this.flushReplayedUser();
             this.post({ type: "tool", id: t.id, title: t.title, kind: t.kind, status: t.status, isUpdate });
+            if (this.replaying) return;
             if (!isUpdate) this.speak(this.chunker.flush());
             if (t.locations.length && (t.kind === "read" || t.kind === "edit")) void this.editor.follow(t.locations);
           },
@@ -205,6 +226,57 @@ export class HarnessPanel implements vscode.Disposable {
       this.output.appendLine(`start failed: ${detail}`);
       this.post({ type: "state", state: "error", detail });
     }
+  }
+
+  // MARK: Past sessions
+
+  private async listSessions(): Promise<void> {
+    if (!this.session) return;
+    try {
+      const items = (await this.session.list()).map((s) => ({
+        id: s.id,
+        title: HarnessPanel.withoutEditorContext(s.title ?? "").trim() || "Untitled conversation",
+        updatedAt: s.updatedAt,
+      }));
+      this.post({ type: "sessions", items, currentId: this.session.sessionId });
+    } catch (err) {
+      this.post({ type: "notice", text: `Could not list conversations: ${(err as Error).message}` });
+    }
+  }
+
+  /** Replaces the chat with a past conversation, replayed silently. */
+  private async loadSession(id: string): Promise<void> {
+    if (!this.session) return;
+    this.silence();
+    if (this.turn) {
+      this.session.cancel();
+      await this.turn;
+    }
+    this.post({ type: "clear" });
+    this.post({ type: "state", state: "starting", detail: "Loading conversation…" });
+    this.replaying = true;
+    this.replayUser = "";
+    try {
+      await this.session.load(id);
+      this.flushReplayedUser();
+      this.post({ type: "notice", text: "Conversation restored. New messages continue it." });
+    } catch (err) {
+      this.post({ type: "error", text: `Could not load the conversation: ${(err as Error).message}` });
+    } finally {
+      this.replaying = false;
+      this.post({ type: "state", state: "ready", detail: this.session?.loginSummary });
+    }
+  }
+
+  private flushReplayedUser(): void {
+    if (!this.replayUser) return;
+    const text = HarnessPanel.withoutEditorContext(this.replayUser).trim();
+    this.replayUser = "";
+    if (text) this.post({ type: "user", text, spoken: false });
+  }
+
+  private static withoutEditorContext(text: string): string {
+    return text.replace(/<editor-context>[\s\S]*?<\/editor-context>\s*/g, "");
   }
 
   /** Starts a user turn, cancelling (and silencing) any turn still running. */
@@ -586,6 +658,10 @@ export class HarnessPanel implements vscode.Disposable {
 </header>
 <main id="log"></main>
 <div id="partial" class="partial" hidden></div>
+<div id="session-menu" class="session-menu" hidden>
+  <div class="session-menu-head"><span>Conversations in this folder</span><button id="session-new" class="secondary">+ New conversation</button><button id="session-close" class="secondary" title="Close">✕</button></div>
+  <div id="session-list" class="session-list"></div>
+</div>
 <footer>
   <textarea id="input" rows="3" placeholder="Ask about the code… (Enter to send, Shift+Enter for a new line, Ctrl+Shift+Space to talk)"></textarea>
   <div class="buttons">
@@ -593,6 +669,7 @@ export class HarnessPanel implements vscode.Disposable {
     <button id="send">Send</button>
     <button id="stop" class="secondary">Stop</button>
     <span class="spacer"></span>
+    <button id="sessions" class="secondary" title="Past conversations in this folder">☰ Sessions</button>
     <button id="speak" class="secondary" title="Speak Claude's replies">🔊 Voice on</button>
     <button id="restart" class="secondary">Restart</button>
   </div>
