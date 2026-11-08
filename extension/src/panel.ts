@@ -288,6 +288,9 @@ export class HarnessPanel implements vscode.Disposable {
       case "speechIdle":
         if (this.voiceState === "speaking") this.setVoice("idle");
         break;
+      case "micWarming":
+        this.setVoice("warming", this.inputDevice ? `mic: ${this.inputDevice}` : undefined);
+        break;
       case "listening":
         this.setVoice("listening", this.inputDevice ? `mic: ${this.inputDevice}` : undefined);
         break;
@@ -323,6 +326,7 @@ export class HarnessPanel implements vscode.Disposable {
       case "spoke":
         break;
       case "error":
+        if (this.voiceState === "warming") this.setVoice("idle", this.inputDevice ? `mic: ${this.inputDevice}` : undefined);
         this.output.appendLine(`voice error: ${e.message}`);
         this.post({ type: "notice", text: `Voice: ${e.message}` });
         break;
@@ -346,6 +350,7 @@ export class HarnessPanel implements vscode.Disposable {
       this.voice.listenStop();
       return;
     }
+    if (this.voiceState === "warming") return;
     // Whatever the agent says next belongs to the turn being replaced.
     this.silence();
     this.voice.listenStart();

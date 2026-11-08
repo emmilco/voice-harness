@@ -26,6 +26,12 @@ let wantInterruptions = CommandLine.arguments.contains("--interruptions")
 
 Events.emit("loading")
 let startedAt = Date()
+var phaseStart = Date()
+/// Logs how long the startup phase that just ended took.
+func phase(_ name: String) {
+    Events.log("startup: \(name) \(Int(Date().timeIntervalSince(phaseStart) * 1000)) ms")
+    phaseStart = Date()
+}
 
 // Microphone permission is requested first so the prompt appears early.
 var micAvailable = false
@@ -33,28 +39,7 @@ if wantMic {
     micAvailable = await AVCaptureDevice.requestAccess(for: .audio)
     if !micAvailable { Events.emit("micUnavailable", ["reason": "microphone access denied"]) }
 }
-
-let kokoro = KokoroAneManager(directory: modelsDirectory, version: .v3)
-do {
-    try await kokoro.initialize(preloadVoices: [voice])
-    // First use of each length bucket is slow; pay it now rather than mid-conversation.
-    for text in ["Ready.", "This warms up the medium length path for speech synthesis.",
-                 "And this one is a longer sentence, so that the longer synthesis path is also loaded and compiled before we start talking."] {
-        _ = try await kokoro.synthesizeDetailed(text: text, voice: voice)
-    }
-} catch {
-    Events.emit("fatal", ["message": "speech synthesis unavailable: \(error.localizedDescription)"])
-    exit(1)
-}
-
-var vad: VadManager?
-if micAvailable && wantInterruptions {
-    do {
-        vad = try await VadManager(modelDirectory: modelsDirectory)
-    } catch {
-        Events.emit("error", ["message": "interruption detection unavailable: \(error.localizedDescription)"])
-    }
-}
+phase("microphone permission")
 
 guard let locale = await SpeechTranscriber.supportedLocale(equivalentTo: Locale(identifier: "en-US")) else {
     Events.emit("fatal", ["message": "speech recognition does not support en-US on this system"])
@@ -65,6 +50,7 @@ if micAvailable,
     Events.log("installing speech recognition assets for \(locale.identifier)")
     try? await request.downloadAndInstall()
 }
+phase("speech recognition assets")
 
 let audio: AudioIO
 do {
@@ -73,6 +59,26 @@ do {
 } catch {
     Events.emit("fatal", ["message": "audio engine failed to start: \(error.localizedDescription)"])
     exit(1)
+}
+phase("audio engine start")
+
+let kokoro = KokoroAneManager(directory: modelsDirectory, version: .v3)
+do {
+    try await kokoro.initialize(preloadVoices: [voice])
+} catch {
+    Events.emit("fatal", ["message": "speech synthesis unavailable: \(error.localizedDescription)"])
+    exit(1)
+}
+phase("kokoro initialize")
+
+var vad: VadManager?
+if micAvailable && wantInterruptions {
+    do {
+        vad = try await VadManager(modelDirectory: modelsDirectory)
+    } catch {
+        Events.emit("error", ["message": "interruption detection unavailable: \(error.localizedDescription)"])
+    }
+    phase("voice activity model")
 }
 
 let speaker = Speaker(kokoro: kokoro, voice: voice, audio: audio)
@@ -108,6 +114,17 @@ Events.emit("ready", [
     "outputDevice": audio.deviceNames.output,
     "startupMs": Int(Date().timeIntervalSince(startedAt) * 1000),
 ])
+
+// The first synthesis of each length is slow. Warm up after `ready`, silently: Kokoro is an
+// actor, so a real sentence arriving meanwhile waits for at most one warm-up step.
+Task {
+    phaseStart = Date()
+    for text in ["Ready.", "This warms up the medium length path for speech synthesis.",
+                 "And this one is a longer sentence, so that the longer synthesis path is also loaded and compiled before we start talking."] {
+        _ = try? await kokoro.synthesizeDetailed(text: text, voice: voice)
+    }
+    phase("background warm-up")
+}
 
 for await line in commandStream {
     guard let data = line.data(using: .utf8), let command = try? JSONDecoder().decode(Command.self, from: data) else {

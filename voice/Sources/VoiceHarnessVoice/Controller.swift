@@ -30,6 +30,7 @@ actor Controller {
     private var preroll: [AVAudioPCMBuffer] = []
     private var prerollFrames = 0
     private var interruptionStarted = Date.distantPast
+    private var lastMicAt = Date.distantPast
     private var levelPeak: Float = 0
     private var lastLevelEmit = Date.distantPast
 
@@ -73,6 +74,19 @@ actor Controller {
     private func startListening() async {
         if mode != .idle { await dropTranscription() }
         await speaker.stop()
+        // After a device change (e.g. AirPods entering headset mode) the microphone can take a
+        // few seconds to deliver audio; don't signal "listening" until it does.
+        if Date().timeIntervalSince(lastMicAt) > 0.3 {
+            Events.emit("micWarming")
+            let deadline = Date().addingTimeInterval(3)
+            while Date().timeIntervalSince(lastMicAt) > 0.3 && Date() < deadline {
+                try? await Task.sleep(for: .milliseconds(50))
+            }
+            if Date().timeIntervalSince(lastMicAt) > 0.3 {
+                Events.emit("error", ["message": "the microphone (\(audio.deviceNames.input)) is not delivering audio"])
+                return
+            }
+        }
         audio.playStartTone()
         try? await Task.sleep(for: .seconds(AudioIO.toneDuration + 0.05))
         mode = .listening
@@ -125,6 +139,7 @@ actor Controller {
     }
 
     func onMic(_ buffer: AVAudioPCMBuffer) async {
+        lastMicAt = Date()
         remember(buffer)
         if mode != .idle { reportLevel(buffer) }
         switch mode {

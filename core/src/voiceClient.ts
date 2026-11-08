@@ -21,6 +21,7 @@ export type VoiceEvent =
   | { event: "speechActive" }
   | { event: "speechIdle" }
   | { event: "spoke"; id: number }
+  | { event: "micWarming" }
   | { event: "listening" }
   | { event: "partial"; text: string; source: "user" | "interruption" }
   | { event: "transcript"; text: string }

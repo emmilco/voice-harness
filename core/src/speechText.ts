@@ -8,6 +8,7 @@ export class SpeechChunker {
   private line = "";
   private prose = "";
   private inFence = false;
+  private firstReleased = false;
 
   /** Feeds streamed text; returns sentences now ready to speak. */
   push(chunk: string): string[] {
@@ -35,6 +36,7 @@ export class SpeechChunker {
     this.line = "";
     this.prose = "";
     this.inFence = false;
+    this.firstReleased = false;
   }
 
   private takeLine(raw: string): void {
@@ -89,7 +91,21 @@ export class SpeechChunker {
         }
       }
     }
-    return out.map(tidy).filter(isSpeakable);
+    return this.splitFirst(out.map(tidy).filter(isSpeakable));
+  }
+
+  /**
+   * Speech can start once the first chunk is synthesized, and synthesis time grows with
+   * length; so a long first sentence of a turn is split at its first comma.
+   */
+  private splitFirst(sentences: string[]): string[] {
+    if (this.firstReleased || sentences.length === 0) return sentences;
+    this.firstReleased = true;
+    const [first, ...rest] = sentences;
+    if (first.length <= 90) return sentences;
+    const comma = first.indexOf(", ", 25);
+    if (comma < 0 || first.length - comma < 20) return sentences;
+    return [first.slice(0, comma + 1), first.slice(comma + 2), ...rest];
   }
 }
 

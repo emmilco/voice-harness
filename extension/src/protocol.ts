@@ -2,7 +2,7 @@
 
 export type SessionState = "starting" | "ready" | "busy" | "error" | "stopped";
 
-export type VoiceUiState = "loading" | "idle" | "listening" | "speaking" | "interrupted" | "unavailable";
+export type VoiceUiState = "loading" | "idle" | "warming" | "listening" | "speaking" | "interrupted" | "unavailable";
 
 export type ToWebview =
   | { type: "state"; state: SessionState; detail?: string }

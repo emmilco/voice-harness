@@ -45,6 +45,18 @@ const cases: [string, () => void][] = [
   ["paragraph break ends a fragment", () => {
     assert.deepEqual(speakAll(["A heading without period\n\nBody text."]), ["A heading without period", "Body text."]);
   }],
+  ["long first sentence of a turn split at its first comma", () => {
+    const long = "The model returns logits with three dimensions, batch and time and vocabulary, so we flatten them first.";
+    assert.deepEqual(speakAll([long + " Then the loss is averaged over every position in the batch."]), [
+      "The model returns logits with three dimensions,",
+      "batch and time and vocabulary, so we flatten them first.",
+      "Then the loss is averaged over every position in the batch.",
+    ]);
+  }],
+  ["short first sentence and later long sentences not split", () => {
+    const later = "This later sentence is also rather long, with a comma in it, but only the first sentence of a turn is split.";
+    assert.deepEqual(speakAll(["Short one. " + later]), ["Short one.", later]);
+  }],
   ["interruption policy", () => {
     for (const t of ["", "mm-hmm", "Yeah.", "okay okay", "Go on.", "uh huh", "Got it", "right"]) assert.equal(classifyInterruption(t), "resume", t);
     for (const t of ["wait, why the square root?", "stop", "no, the other file", "yeah but what about the mask"]) assert.equal(classifyInterruption(t), "newTurn", t);

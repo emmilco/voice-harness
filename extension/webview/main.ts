@@ -30,7 +30,8 @@ const partial = document.getElementById("partial")!;
 const VOICE_LABELS: Record<string, string> = {
   loading: "Voice loading…",
   idle: "Voice ready",
-  listening: "● Listening — press Talk again when done",
+  warming: "Starting mic…",
+  listening: "● Listening — press Send (or Ctrl+Shift+Space) when done",
   speaking: "Speaking",
   interrupted: "Paused — you're speaking",
   unavailable: "Voice unavailable",
@@ -84,8 +85,11 @@ function updateControls(): void {
   stopButton.disabled = !busy && !listening;
   input.disabled = !ready;
   talkButton.disabled = !ready || !voiceUsable;
-  talkButton.textContent = listening ? "■ Done" : "🎙 Talk";
+  talkButton.textContent = listening ? "■ Send" : "🎙 Talk";
+  talkButton.title = listening ? "Send what you said (Ctrl+Shift+Space)" : "Start talking (Ctrl+Shift+Space)";
   talkButton.classList.toggle("listening", listening);
+  stopButton.textContent = listening ? "✕ Discard" : "Stop";
+  stopButton.title = listening ? "Throw away this recording" : "Stop Claude";
 }
 
 function send(): void {
