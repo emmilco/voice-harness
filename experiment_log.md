@@ -100,3 +100,21 @@ Hypothesis: H-serial — one explain_code call per message makes each step execu
 Tried: speech-layer instruction to make walkthrough calls one at a time; two walkthrough runs logging announcement and execution times.
 Outcome: both runs: each step executed ~1.2-1.5 s after its announcement (steps at 9.7, 12.0, 14.2, 17.2, 19.6 s; and 9.8, 12.4, 14.7, 17.0, 19.2 s). First step 9.7-9.8 s vs 14.7-15.1 s when batched.
 Learning: H-serial supported (2/2): walkthroughs start ~5 s sooner; later steps arrive every ~2.3 s, faster than each step's speech, so playback is continuous. Closed.
+
+## Attempt 18 — 2026-11-08 03:30:00
+Hypothesis: asking Claude to use TaskCreate/TaskUpdate produces ACP plan updates (the adapter maps TaskCreate/TaskUpdate/TaskList and TodoWrite to `plan`, acp-agent.js:2623, 10767-10772).
+Tried: smoke prompt asking for TaskCreate with three tasks then TaskUpdate; logged plan updates, tool calls and the reply.
+Outcome: no plan update. Claude ran ToolSearch ("No matching deferred tools found") and replied that the session has no TaskCreate or TaskUpdate tool.
+Learning: the task tools are not available in harness sessions (this Claude Code build/config, via the Agent SDK). Next candidate H-todowrite: the older TodoWrite tool is available. Falsified if it is missing too.
+
+## Attempt 19 — 2026-11-08 03:35:00
+Hypothesis: H-todowrite — the older TodoWrite tool is available and produces plan updates.
+Tried: smoke prompt asking for TodoWrite with three items, the first completed.
+Outcome: ToolSearch "No matching deferred tools found"; Claude wrote the list as text ("Proposed todos (not created)"); no plan update.
+Learning: H-todowrite falsified. Neither task-list tool exists in harness sessions. Convergence check: look for what disables them (user settings, adapter options) before deciding.
+
+## Attempt 20 — 2026-11-08 03:40:00 (convergence check)
+Hypothesis: something in user settings or the adapter disables the task-list tools.
+Tried: read ~/.claude/settings.json deny rules, env and keys; searched the adapter for disallowedTools and TodoWrite.
+Outcome: no task-related deny rule or env var; the adapter only disallows AskUserQuestion (because the client does not declare elicitation support) and renders TodoWrite/Task* as plans.
+Learning: ruled out our wiring, user settings and the adapter. Remaining (inferred): this Claude Code build does not offer TodoWrite/Task* in Agent SDK sessions. Paused; options put to Elliot: a harness update_checklist tool plus the plan UI (recommended), plan UI only, or drop. Side finding: AskUserQuestion is unavailable in harness sessions until the client supports elicitation.

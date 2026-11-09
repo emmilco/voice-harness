@@ -106,6 +106,8 @@ export interface SessionHandlers {
   onUsage?(usage: { used: number; size: number }): void;
   /** The conversation's title, when the agent sets or changes it. */
   onTitle?(title: string): void;
+  /** The agent's task checklist (full list each time); empty when it is cleared. */
+  onPlan?(entries: { content: string; status: string; priority?: string }[]): void;
   /** Slash commands (and skills) the agent accepts at the start of a message. */
   onCommands?(commands: { name: string; description: string; hint?: string }[]): void;
   /** A new tool call (`isUpdate` false) or a change to one already reported. */
@@ -241,6 +243,12 @@ export class AgentSession {
             break;
           case "session_info_update":
             if (u.title) handlers.onTitle?.(u.title);
+            break;
+          case "plan":
+            handlers.onPlan?.(u.entries.map((e) => ({ content: e.content, status: e.status, priority: e.priority ?? undefined })));
+            break;
+          case "plan_removed":
+            handlers.onPlan?.([]);
             break;
           case "available_commands_update":
             handlers.onCommands?.(

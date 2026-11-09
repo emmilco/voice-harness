@@ -95,10 +95,11 @@ const session = await AgentSession.start({
       text += c;
       if (voice) say(chunker.push(c));
     },
+    onPlan: (entries) => log("plan", entries.map((e) => `[${e.status}] ${e.content}`).join(" | ") || "(cleared)"),
     onCommands: (cmds) => log("commands", `${cmds.length} available: ${cmds.slice(0, 6).map((c) => "/" + c.name).join(" ")} …`),
     onToolCall: (t, isUpdate) => {
       if (process.env.VH_LOG_CONTENT && t.content?.length) {
-        log("content", `${t.name ?? "?"} ${t.status ?? ""} ${t.content.map((c) => (c.kind === "diff" ? `diff(${path.basename(c.path)})` : `text(${c.text.length})`)).join(", ")}`);
+        log("content", `${t.name ?? "?"} ${t.status ?? ""} ${t.content.map((c) => (c.kind === "diff" ? `diff(${path.basename(c.path)})` : process.env.VH_LOG_CONTENT === "full" ? JSON.stringify(c.text) : `text(${c.text.length})`)).join(", ")}`);
       }
       if (process.env.VH_LOG_RAW && /explain_code/.test(t.title ?? "")) {
         log("raw", `${isUpdate ? "update" : "announce"} ${t.id.slice(-6)} status=${t.status} input=${JSON.stringify(t.rawInput ?? null).slice(0, 90)}`);
