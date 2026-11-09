@@ -6,6 +6,11 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
     output,
     vscode.commands.registerCommand("voiceHarness.openPanel", () => HarnessPanel.show(context, output)),
+    vscode.window.registerWebviewViewProvider(
+      HarnessPanel.VIEW_ID,
+      { resolveWebviewView: (view) => HarnessPanel.attachView(view, context, output) },
+      { webviewOptions: { retainContextWhenHidden: true } },
+    ),
     vscode.commands.registerCommand("voiceHarness.restartSession", () => HarnessPanel.restart()),
     vscode.commands.registerCommand("voiceHarness.toggleListening", () => HarnessPanel.toggleListening()),
     vscode.commands.registerCommand("voiceHarness.restartVoice", () => HarnessPanel.restartVoice()),

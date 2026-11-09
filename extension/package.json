@@ -76,6 +76,15 @@
           "type": "boolean",
           "default": true,
           "description": "After Claude finishes a spoken reply, open the microphone for your answer; a pause ends your turn. Turns you start with Talk still end with Send."
+        },
+        "voiceHarness.location": {
+          "type": "string",
+          "enum": [
+            "sidebar",
+            "editor"
+          ],
+          "default": "sidebar",
+          "description": "Where Voice Harness: Open Panel puts the chat: the secondary sidebar, or an editor tab beside your code."
         }
       }
     },
@@ -85,7 +94,25 @@
         "key": "ctrl+shift+space",
         "mac": "ctrl+shift+space"
       }
-    ]
+    ],
+    "viewsContainers": {
+      "secondarySidebar": [
+        {
+          "id": "voice-harness",
+          "title": "Voice Harness",
+          "icon": "media/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "voice-harness": [
+        {
+          "type": "webview",
+          "id": "voiceHarness.view",
+          "name": "Voice Harness"
+        }
+      ]
+    }
   },
   "scripts": {
     "build": "node esbuild.mjs"

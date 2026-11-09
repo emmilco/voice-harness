@@ -30,6 +30,36 @@ import { EditorTracker } from "./editorTracker";
 import type { FromWebview, ToWebview, VoiceUiState } from "./protocol";
 import { resolveTool } from "./toolchain";
 
+/** Where the chat lives: an editor tab or a sidebar view. */
+export interface HarnessHost {
+  readonly webview: vscode.Webview;
+  setTitle(title: string): void;
+  reveal(): void;
+  onDidDispose(listener: () => void): vscode.Disposable;
+  /** Closes the host when that is possible (an editor tab); a sidebar view stays. */
+  close(): void;
+}
+
+function tabHost(panel: vscode.WebviewPanel): HarnessHost {
+  return {
+    webview: panel.webview,
+    setTitle: (title) => (panel.title = title),
+    reveal: () => panel.reveal(vscode.ViewColumn.Two),
+    onDidDispose: (listener) => panel.onDidDispose(listener),
+    close: () => panel.dispose(),
+  };
+}
+
+function viewHost(view: vscode.WebviewView): HarnessHost {
+  return {
+    webview: view.webview,
+    setTitle: (title) => (view.description = title.replace(/^Voice Harness: /, "")),
+    reveal: () => view.show(false),
+    onDidDispose: (listener) => view.onDidDispose(listener),
+    close: () => {},
+  };
+}
+
 /**
  * The chat panel: owns one agent session, the voice process, and the editor
  * effects the agent causes.
@@ -82,22 +112,45 @@ export class HarnessPanel implements vscode.Disposable {
   private readonly diffs = new DiffView();
   private disposed = false;
 
+  static readonly VIEW_ID = "voiceHarness.view";
+
+  /** Opens the chat where the `voiceHarness.location` setting says (sidebar by default). */
   static show(context: vscode.ExtensionContext, output: vscode.OutputChannel): void {
     if (HarnessPanel.current) {
-      HarnessPanel.current.panel.reveal(vscode.ViewColumn.Two);
+      HarnessPanel.current.host.reveal();
       return;
     }
-    const folder = vscode.workspace.workspaceFolders?.[0];
-    if (!folder) {
-      void vscode.window.showErrorMessage("Voice Harness needs an open folder: the agent works inside it.");
+    if (vscode.workspace.getConfiguration("voiceHarness").get<string>("location", "sidebar") === "sidebar") {
+      void vscode.commands.executeCommand(`${HarnessPanel.VIEW_ID}.focus`);
       return;
     }
+    const folder = HarnessPanel.workspaceFolder();
+    if (!folder) return;
     const panel = vscode.window.createWebviewPanel("voiceHarness", "Voice Harness", vscode.ViewColumn.Two, {
       enableScripts: true,
       retainContextWhenHidden: true,
       localResourceRoots: [vscode.Uri.joinPath(context.extensionUri, "dist")],
     });
-    HarnessPanel.current = new HarnessPanel(panel, context, folder.uri.fsPath, output);
+    HarnessPanel.current = new HarnessPanel(tabHost(panel), context, folder, output);
+  }
+
+  /** Hosts the chat in the sidebar view when VS Code first shows it. */
+  static attachView(view: vscode.WebviewView, context: vscode.ExtensionContext, output: vscode.OutputChannel): void {
+    view.webview.options = { enableScripts: true, localResourceRoots: [vscode.Uri.joinPath(context.extensionUri, "dist")] };
+    const folder = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    if (HarnessPanel.current || !folder) {
+      view.webview.html = `<!DOCTYPE html><html><body style="padding:12px;font-family:var(--vscode-font-family);color:var(--vscode-descriptionForeground)">${
+        folder ? "Voice Harness is open in an editor tab." : "Open a folder to use Voice Harness: the agent works inside it."
+      }</body></html>`;
+      return;
+    }
+    HarnessPanel.current = new HarnessPanel(viewHost(view), context, folder, output);
+  }
+
+  private static workspaceFolder(): string | undefined {
+    const folder = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    if (!folder) void vscode.window.showErrorMessage("Voice Harness needs an open folder: the agent works inside it.");
+    return folder;
   }
 
   static restart(): void {
@@ -119,11 +172,13 @@ export class HarnessPanel implements vscode.Disposable {
 
   /** Ends the agent and voice processes when the extension deactivates. */
   static disposeCurrent(): void {
-    HarnessPanel.current?.panel.dispose();
+    const current = HarnessPanel.current;
+    current?.host.close();
+    current?.dispose();
   }
 
   private constructor(
-    private readonly panel: vscode.WebviewPanel,
+    private readonly host: HarnessHost,
     private readonly context: vscode.ExtensionContext,
     private readonly workspace: string,
     private readonly output: vscode.OutputChannel,
@@ -132,13 +187,13 @@ export class HarnessPanel implements vscode.Disposable {
     this.tracker = new EditorTracker(workspace);
     this.speakReplies = vscode.workspace.getConfiguration("voiceHarness").get<boolean>("speakReplies", true);
     this.conversation = vscode.workspace.getConfiguration("voiceHarness").get<boolean>("conversationMode", true);
-    panel.webview.html = this.html();
-    panel.webview.onDidReceiveMessage((m: FromWebview) => this.onMessage(m));
-    panel.onDidDispose(() => this.dispose());
+    host.webview.html = this.html();
+    host.webview.onDidReceiveMessage((m: FromWebview) => this.onMessage(m));
+    host.onDidDispose(() => this.dispose());
   }
 
   private post(message: ToWebview): void {
-    if (!this.disposed) void this.panel.webview.postMessage(message);
+    if (!this.disposed) void this.host.webview.postMessage(message);
   }
 
   private async onMessage(m: FromWebview): Promise<void> {
@@ -322,7 +377,7 @@ export class HarnessPanel implements vscode.Disposable {
   private setTitle(title: string): void {
     const clean = HarnessPanel.withoutEditorContext(title).trim();
     if (!clean) return;
-    this.panel.title = `Voice Harness: ${clean}`;
+    this.host.setTitle(`Voice Harness: ${clean}`);
     this.post({ type: "title", title: clean });
   }
 
@@ -853,7 +908,7 @@ export class HarnessPanel implements vscode.Disposable {
   }
 
   private html(): string {
-    const webview = this.panel.webview;
+    const webview = this.host.webview;
     const nonce = randomBytes(16).toString("base64");
     const asset = (name: string) => webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, "dist", name));
     return `<!DOCTYPE html>

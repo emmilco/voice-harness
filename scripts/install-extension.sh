@@ -43,6 +43,7 @@ step "Staging the extension"
 rm -rf "$STAGE"
 mkdir -p "$STAGE/bin"
 cp -R "$ROOT/extension/dist" "$STAGE/dist"
+cp -R "$ROOT/extension/media" "$STAGE/media"
 rm -f "$STAGE"/dist/*.map
 cp "$ROOT/README.md" "$STAGE/README.md"
 cp "$ROOT/voice/.build/release/VoiceHarnessVoice" "$STAGE/bin/"
