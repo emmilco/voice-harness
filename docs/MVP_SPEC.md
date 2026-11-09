@@ -85,6 +85,8 @@ Passed to the agent at session start. All are **display-only** — they change w
 
 **Decided — other agents run in the main account with the normal allow-list (Elliot, 2026-11-08).** Local and cloud models driven through other ACP agents (e.g. opencode) run in Elliot's main account in the attended panel, under his usual Claude Code-style permissions. Elliot's view: an attended interactive session does not need an AISP amendment. Noted for future sessions: AISP Part III's text places agentic local models in the `aiuser` sandbox "always", and allow-listed commands run without a prompt, so the attendance gate is partial; Elliot has decided the matter.
 
+**Decided — no todo checklist for now (Elliot, 2026-11-09).** Claude Code offers neither TodoWrite nor the Task tools in harness sessions (experiment_log attempts 18-20), so ACP plan updates do not arrive. The core still reports plan updates (`onPlan`) for agents that send them; no UI shows them.
+
 **Decided — transitive `@anthropic-ai/sdk` accepted (Elliot, policy exception).** Elliot's QMS §11.1 says the `anthropic` SDK shall not be installed. `@anthropic-ai/sdk` arrives as a dependency of `@anthropic-ai/claude-agent-sdk`, on which `claude-agent-acp` is built; it is in `node_modules/` and in the packaged `.vsix`. No harness code imports it or calls the API. The rule's purpose (no per-token billing) is enforced by the billing guard (`core/src/billingGuard.ts`), which requires a claude.ai login and refuses API keys, `apiKeyHelper` and alternate providers. Do not add direct uses of the SDK.
 
 **Decided — MCP transport.** A tiny stdio MCP server the agent launches, relaying calls to the extension over a local socket. (ACP agents must support stdio MCP servers; HTTP support is optional.)
