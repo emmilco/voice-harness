@@ -139,6 +139,27 @@ export class HarnessPanel implements vscode.Disposable, TabServices {
     HarnessPanel.current?.talk();
   }
 
+  static focusInput(context: vscode.ExtensionContext, output: vscode.OutputChannel): void {
+    if (!HarnessPanel.current) {
+      HarnessPanel.show(context, output);
+      return;
+    }
+    HarnessPanel.current.host.reveal();
+    HarnessPanel.current.postPanel({ type: "focusInput" });
+  }
+
+  static stop(): void {
+    void HarnessPanel.current?.stopActive();
+  }
+
+  static cycleTab(step: number): void {
+    const panel = HarnessPanel.current;
+    if (!panel || panel.tabs.size < 2) return;
+    const ids = [...panel.tabs.keys()];
+    const index = ids.indexOf(panel.activeId);
+    panel.activate(ids[(index + step + ids.length) % ids.length]);
+  }
+
   static restartVoice(): void {
     const panel = HarnessPanel.current;
     if (!panel) return;
@@ -302,16 +323,36 @@ export class HarnessPanel implements vscode.Disposable, TabServices {
       this.stopVoiceOutput();
       this.awaitingReply = false;
       if (this.autoTurn.running || this.voiceState === "listening" || this.voiceState === "warming") this.cancelListening();
-      if (this.conversation) {
-        this.conversation = false;
-        this.postVoice();
-      }
+    }
+    const turnOffAutoListen = !!previous && previous.id !== id && this.conversation;
+    if (turnOffAutoListen) {
+      this.conversation = false;
+      this.postVoice();
     }
     this.activeId = id;
     const tab = this.active;
     if (tab) tab.unread = false;
     this.postTabs();
     this.updateHostTitle();
+    if (turnOffAutoListen) this.postPanel({ type: "notice", text: "Auto-listen turned off because you switched conversations." });
+  }
+
+  /**
+   * Stop, for the visible tab: discards a recording in progress; otherwise stops Claude's turn;
+   * after the turn, silences a reply that is still being spoken.
+   */
+  private async stopActive(): Promise<void> {
+    const tab = this.active;
+    if (!tab) return;
+    if (this.voiceState === "listening" || this.voiceState === "warming") {
+      this.cancelListening();
+      return;
+    }
+    if (!tab.busy) {
+      this.stopVoiceOutput();
+      return;
+    }
+    await tab.handle({ type: "stop", tabId: tab.id });
   }
 
   private closeTab(id: string): void {
@@ -351,16 +392,8 @@ export class HarnessPanel implements vscode.Disposable, TabServices {
         if (this.autoTurn.running && this.isActive(tab)) this.cancelListening();
       }
       if (request.type === "stop" && this.isActive(tab)) {
-        // While recording, the button is Discard: it throws the recording away and nothing else.
-        if (this.voiceState === "listening" || this.voiceState === "warming") {
-          this.cancelListening();
-          return;
-        }
-        if (!tab.busy) {
-          // The turn is over but its reply may still be playing: Stop silences it.
-          this.stopVoiceOutput();
-          return;
-        }
+        await this.stopActive();
+        return;
       }
       await tab.handle(request);
       return;
@@ -410,6 +443,9 @@ export class HarnessPanel implements vscode.Disposable, TabServices {
         break;
       case "switchTab":
         if (this.tabs.has(m.id)) this.activate(m.id);
+        break;
+      case "restartVoice":
+        HarnessPanel.restartVoice();
         break;
     }
   }

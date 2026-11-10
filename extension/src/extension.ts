@@ -14,6 +14,10 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand("voiceHarness.restartSession", () => HarnessPanel.restart()),
     vscode.commands.registerCommand("voiceHarness.toggleListening", () => HarnessPanel.toggleListening()),
     vscode.commands.registerCommand("voiceHarness.restartVoice", () => HarnessPanel.restartVoice()),
+    vscode.commands.registerCommand("voiceHarness.focusInput", () => HarnessPanel.focusInput(context, output)),
+    vscode.commands.registerCommand("voiceHarness.stop", () => HarnessPanel.stop()),
+    vscode.commands.registerCommand("voiceHarness.nextConversation", () => HarnessPanel.cycleTab(1)),
+    vscode.commands.registerCommand("voiceHarness.previousConversation", () => HarnessPanel.cycleTab(-1)),
   );
 }
 

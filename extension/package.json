@@ -27,6 +27,22 @@
       {
         "command": "voiceHarness.restartVoice",
         "title": "Voice Harness: Restart Voice"
+      },
+      {
+        "command": "voiceHarness.focusInput",
+        "title": "Voice Harness: Focus Message Box"
+      },
+      {
+        "command": "voiceHarness.stop",
+        "title": "Voice Harness: Stop"
+      },
+      {
+        "command": "voiceHarness.nextConversation",
+        "title": "Voice Harness: Next Conversation"
+      },
+      {
+        "command": "voiceHarness.previousConversation",
+        "title": "Voice Harness: Previous Conversation"
       }
     ],
     "configuration": {
@@ -93,6 +109,26 @@
         "command": "voiceHarness.toggleListening",
         "key": "ctrl+shift+space",
         "mac": "ctrl+shift+space"
+      },
+      {
+        "command": "voiceHarness.focusInput",
+        "key": "ctrl+shift+i",
+        "mac": "ctrl+shift+i"
+      },
+      {
+        "command": "voiceHarness.stop",
+        "key": "ctrl+shift+backspace",
+        "mac": "ctrl+shift+backspace"
+      },
+      {
+        "command": "voiceHarness.nextConversation",
+        "key": "ctrl+shift+]",
+        "mac": "ctrl+shift+]"
+      },
+      {
+        "command": "voiceHarness.previousConversation",
+        "key": "ctrl+shift+[",
+        "mac": "ctrl+shift+["
       }
     ],
     "viewsContainers": {

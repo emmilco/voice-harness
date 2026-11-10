@@ -80,7 +80,8 @@ export type PanelMessage =
   | { type: "tabs"; tabs: TabSummary[]; activeId: string }
   | { type: "files"; query: string; files: string[] }
   | { type: "sessions"; items: { id: string; title: string; updatedAt?: string; openInTab?: string }[] }
-  | { type: "notice"; text: string };
+  | { type: "notice"; text: string }
+  | { type: "focusInput" };
 
 export type ToWebview = TabMessage | PanelMessage;
 
@@ -112,6 +113,7 @@ export type PanelRequest =
   | { type: "openSession"; id: string }
   | { type: "newTab" }
   | { type: "closeTab"; id: string }
-  | { type: "switchTab"; id: string };
+  | { type: "switchTab"; id: string }
+  | { type: "restartVoice" };
 
 export type FromWebview = TabRequest | PanelRequest;

@@ -48,6 +48,11 @@ export class Completer {
       this.render();
       return true;
     }
+    if (e.key === "Enter" && !e.shiftKey && this.items.length === 1 && this.input.value.trim() === this.items[0].insert.trim()) {
+      // Already fully typed: let Enter send the message.
+      this.close();
+      return false;
+    }
     if (e.key === "Tab" || (e.key === "Enter" && !e.shiftKey)) {
       this.accept(this.selected);
       return true;

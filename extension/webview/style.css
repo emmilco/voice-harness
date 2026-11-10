@@ -351,3 +351,9 @@ body.vscode-light .hljs-deletion { color: #a31515; }
   font-size: 0.8em; font-family: var(--vscode-editor-font-family); color: var(--vscode-textLink-foreground);
 }
 .step-ref:hover { text-decoration: underline; background: transparent; }
+
+.empty-state { margin: 12px 4px; padding: 12px 14px; border: 1px dashed var(--vscode-panel-border); border-radius: 8px; color: var(--vscode-descriptionForeground); font-size: 0.9em; }
+.empty-title { font-weight: 600; color: var(--vscode-foreground); margin-bottom: 6px; }
+.empty-state ul { margin: 0; padding-left: 18px; }
+.empty-state li { margin: 2px 0; }
+.voice-restart { margin-left: 8px; padding: 1px 8px; font-size: 0.9em; }

@@ -102,19 +102,52 @@ class TabView {
   /** Rows that arrived before their chart finished rendering. */
   private readonly earlyRows = new Map<string, Record<string, unknown>[]>();
 
+  /** Follow new output only while the reader is at the bottom; scrolling up to re-read pauses it. */
+  private pinned = true;
+  /** The unsent message and images, kept while another tab is shown. */
+  draft = "";
+  draftImages: { mimeType: string; data: string; url: string }[] = [];
+
   constructor(readonly id: string) {
     this.log.hidden = true;
     logs.appendChild(this.log);
+    this.log.addEventListener("scroll", () => {
+      this.pinned = this.log.scrollHeight - this.log.scrollTop - this.log.clientHeight < 80;
+    });
+    this.showEmptyState();
   }
 
-  scrollToEnd(): void {
-    this.log.scrollTop = this.log.scrollHeight;
+  /** Scrolls to the newest output: always when `force`, otherwise only if the reader is at the bottom. */
+  scrollToEnd(force = false): void {
+    if (force) this.pinned = true;
+    if (this.pinned) this.log.scrollTop = this.log.scrollHeight;
   }
 
   append(el: HTMLElement): void {
-    const nearBottom = this.log.scrollHeight - this.log.scrollTop - this.log.clientHeight < 80;
+    this.log.querySelector(".empty-state")?.remove();
     this.log.appendChild(el);
-    if (nearBottom) this.scrollToEnd();
+    this.scrollToEnd();
+  }
+
+  private showEmptyState(): void {
+    const card = div("empty-state");
+    card.appendChild(div("empty-title", "Ask about the code, typed or aloud."));
+    const tips = [
+      "🎙 Talk: Ctrl+Shift+Space, or the Talk button; press Done when finished",
+      "🎧 With auto-listen on, just answer after Claude speaks; a pause sends",
+      "/ for commands and skills · @ to attach a file · paste or drop images",
+      "↑ in an empty box recalls earlier messages",
+      "Typed messages wait while Claude works; Talk interrupts instead",
+      "Hover over one of your messages to rewind the conversation to it",
+    ];
+    const list = document.createElement("ul");
+    for (const tip of tips) {
+      const li = document.createElement("li");
+      li.textContent = tip;
+      list.appendChild(li);
+    }
+    card.appendChild(list);
+    this.log.appendChild(card);
   }
 
   private renderAgent(): void {
@@ -145,6 +178,7 @@ class TabView {
         break;
       case "user": {
         this.endAgentMessage();
+        this.scrollToEnd(true);
         const bubble = div("message user", m.text);
         if (m.spoken) bubble.classList.add("spoken");
         if (m.context) {
@@ -183,10 +217,17 @@ class TabView {
           requestAnimationFrame(() => this.renderAgent());
         }
         break;
-      case "turnEnd":
+      case "turnEnd": {
         this.endAgentMessage();
-        if (m.stopReason !== "end_turn") this.append(div("notice", `Turn ended: ${m.stopReason}`));
+        const reasons: Record<string, string> = {
+          cancelled: "Stopped.",
+          max_tokens: "Reply cut off (length limit).",
+          max_turn_requests: "Stopped (too many steps in one turn).",
+          refusal: "Claude declined to continue.",
+        };
+        if (m.stopReason !== "end_turn") this.append(div("notice", reasons[m.stopReason] ?? `Turn ended: ${m.stopReason}`));
         break;
+      }
       case "tool": {
         if (m.hidden) break;
         // A tool call splits the reply: text after it starts a new bubble.
@@ -209,13 +250,17 @@ class TabView {
           const b = document.createElement("button");
           b.textContent = o.name;
           b.className = o.kind.startsWith("allow") ? "allow" : "secondary";
-          b.addEventListener("click", () => vscode.postMessage({ type: "permission", tabId: this.id, requestId: m.requestId, optionId: o.optionId }));
+          b.addEventListener("click", () => {
+            vscode.postMessage({ type: "permission", tabId: this.id, requestId: m.requestId, optionId: o.optionId });
+            input.focus();
+          });
           row.appendChild(b);
         }
         card.appendChild(row);
         this.permissionCards.set(m.requestId, card);
         this.append(card);
-        this.scrollToEnd();
+        this.scrollToEnd(true);
+        if (this.id === activeId) (row.querySelector("button.allow") as HTMLButtonElement | null)?.focus();
         break;
       }
       case "permissionDone": {
@@ -299,7 +344,7 @@ class TabView {
       case "queued": {
         const bubble = div("message user queued", m.text + (m.images ? `  (+${m.images} image${m.images > 1 ? "s" : ""})` : ""));
         const bar = div("queued-bar");
-        bar.appendChild(div("queued-label", "queued — sends when Claude finishes"));
+        bar.appendChild(div("queued-label", "queued — sends when Claude finishes (Talk interrupts)"));
         const now = document.createElement("button");
         now.className = "secondary";
         now.textContent = "Send now";
@@ -314,7 +359,7 @@ class TabView {
         bubble.appendChild(bar);
         this.queuedBubbles.set(m.id, bubble);
         this.append(bubble);
-        this.scrollToEnd();
+        this.scrollToEnd(true);
         break;
       }
       case "dequeued":
@@ -333,6 +378,8 @@ class TabView {
         this.speakingEl = undefined;
         this.title = "";
         this.usage = undefined;
+        this.pinned = true;
+        this.showEmptyState();
         break;
       case "prefill":
         if (this.id === activeId) {
@@ -461,6 +508,15 @@ function renderOptions(v: TabView): void {
 
 function showTab(id: string): void {
   if (id === activeId && views.get(id) && !views.get(id)!.log.hidden) return;
+  const previous = activeView();
+  if (previous) {
+    previous.draft = input.value;
+    previous.draftImages = pendingImages.splice(0);
+  }
+  const next = view(id);
+  input.value = next.draft;
+  pendingImages.push(...next.draftImages.splice(0));
+  renderImageTray();
   activeId = id;
   for (const v of views.values()) v.log.hidden = v.id !== id;
   view(id).log.hidden = false;
@@ -605,6 +661,7 @@ const VOICE_LABELS: Record<string, string> = {
   unavailable: "Voice unavailable",
 };
 let voiceUsable = false;
+let voiceUnavailableReason = "";
 let listening = false;
 let speaking = false;
 const meter = document.createElement("span");
@@ -621,7 +678,11 @@ function updateControls(): void {
   input.disabled = !ready;
   talkButton.disabled = !ready || !voiceUsable;
   talkButton.textContent = listening ? "■ Done" : "🎙 Talk";
-  talkButton.title = listening ? "Finish and send what you said (Ctrl+Shift+Space)" : "Start talking (Ctrl+Shift+Space)";
+  talkButton.title = listening
+    ? "Finish and send what you said (Ctrl+Shift+Space)"
+    : voiceUsable
+      ? "Start talking (Ctrl+Shift+Space)"
+      : `Voice input unavailable: ${voiceUnavailableReason || "microphone not available"}`;
   talkButton.classList.toggle("listening", listening);
   stopButton.textContent = listening ? "✕ Discard" : "Stop";
   stopButton.title = listening ? "Throw away this recording" : busy ? "Stop Claude" : "Stop speaking";
@@ -664,6 +725,14 @@ function applyPanel(m: PanelMessage): void {
         (m.detail ? ` — ${m.detail}` : "");
       meter.textContent = "";
       if (m.state === "listening" || m.state === "interrupted") voiceChip.appendChild(meter);
+      voiceUnavailableReason = m.state === "unavailable" ? (m.detail ?? "the voice process stopped") : m.state === "loading" ? "voice is still loading" : "";
+      if (m.state === "unavailable") {
+        const restart = document.createElement("button");
+        restart.className = "secondary voice-restart";
+        restart.textContent = "Restart voice";
+        restart.addEventListener("click", () => vscode.postMessage({ type: "restartVoice" }));
+        voiceChip.appendChild(restart);
+      }
       speakButton.textContent = m.speak ? "🔊 Voice on" : "🔇 Voice off";
       updateControls();
       break;
@@ -703,6 +772,9 @@ function applyPanel(m: PanelMessage): void {
     case "notice":
       activeView()?.append(div("notice", m.text));
       break;
+    case "focusInput":
+      input.focus();
+      break;
   }
 }
 
@@ -728,11 +800,18 @@ input.addEventListener("keydown", (e) => {
     send();
   }
 });
-sendButton.addEventListener("click", send);
+sendButton.addEventListener("click", () => {
+  send();
+  input.focus();
+});
 stopButton.addEventListener("click", () => {
   if (activeId) vscode.postMessage({ type: "stop", tabId: activeId });
+  input.focus();
 });
-talkButton.addEventListener("click", () => vscode.postMessage({ type: "talk" }));
+talkButton.addEventListener("click", () => {
+  vscode.postMessage({ type: "talk" });
+  input.focus();
+});
 document.getElementById("new-tab")!.addEventListener("click", () => vscode.postMessage({ type: "newTab" }));
 document.getElementById("sessions")!.addEventListener("click", () => {
   if (!sessionMenu.hidden) {
