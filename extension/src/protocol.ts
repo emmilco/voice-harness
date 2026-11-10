@@ -87,7 +87,9 @@ export type PanelMessage =
   | { type: "files"; query: string; files: string[] }
   | { type: "sessions"; items: { id: string; title: string; updatedAt?: string; openInTab?: string }[] }
   | { type: "notice"; text: string }
-  | { type: "focusInput" };
+  | { type: "focusInput" }
+  /** The typeface for Claude's answers. */
+  | { type: "reading"; font: "serif" | "sans" };
 
 export type ToWebview = TabMessage | PanelMessage;
 

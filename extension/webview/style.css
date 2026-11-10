@@ -153,17 +153,33 @@ svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width:
 .message > :last-child, .md-tail > :last-child { margin-bottom: 0; }
 .message p { margin: 0 0 0.7em; }
 .message ul, .message ol { margin: 0 0 0.7em; padding-left: 1.4em; }
-.message li + li { margin-top: 0.2em; }
+.message li + li { margin-top: 0.35em; }
+.message li > p { margin: 0; }
+.message p, .message li { text-wrap: pretty; }
+.message h1, .message h2, .message h3 { text-wrap: balance; }
 .message h1, .message h2, .message h3 { font-size: 1em; font-weight: 600; margin: 1em 0 0.4em; }
 .message a { color: var(--vscode-textLink-foreground); }
-.message code { font-family: var(--vh-code); font-size: 0.9em; padding: 0.05em 0.3em; border-radius: 3px; background: var(--vh-tint); }
+.message code { font-family: var(--vh-code); font-size: 0.86em; padding: 0.08em 0.25em; border-radius: 3px; background: var(--vh-tint); }
 .message pre { margin: 0 0 0.8em; padding: 10px 12px; overflow-x: auto; border-radius: var(--vh-radius); background: var(--vscode-textCodeBlock-background, var(--vh-tint)); line-height: 1.45; }
 .message pre code { padding: 0; background: none; font-size: 0.88em; }
 .message table { border-collapse: collapse; margin: 0 0 0.8em; font-size: 0.92em; }
 .message th, .message td { border-bottom: 1px solid var(--vh-line); padding: 3px 8px; text-align: left; }
 
-/* Claude's answers: prose on the page, no card. */
-.message.agent { position: relative; }
+/* Claude's answers: prose on the page, no card, at a readable measure. */
+.message.agent { position: relative; max-width: 72ch; }
+.message.step { max-width: 72ch; }
+
+/* Reading serif for answers and walkthrough steps (setting voiceHarness.readingFont). */
+body.reading-serif .message.agent, body.reading-serif .step-body {
+  font-family: "Charter", "Iowan Old Style", Georgia, serif;
+  font-size: 1.07em;
+  line-height: 1.62;
+  max-width: 66ch;
+  font-kerning: normal;
+  font-variant-ligatures: common-ligatures;
+}
+body.reading-serif .message.agent code, body.reading-serif .message.agent pre, body.reading-serif .step-body code { font-size: 0.8em; }
+body.reading-serif .message.agent .onscreen { font-family: var(--vscode-font-family); font-size: 0.84em; line-height: 1.5; }
 .message.speaking::before {
   content: ""; position: absolute; left: -9px; top: 3px; bottom: 3px; width: 2px; border-radius: 2px;
   background: var(--vh-ok);
@@ -317,12 +333,14 @@ textarea::placeholder { color: var(--vscode-input-placeholderForeground); }
 .options { display: flex; flex-wrap: nowrap; gap: 2px; align-items: center; min-width: 0; overflow: hidden; }
 .option-select {
   appearance: none; -webkit-appearance: none;
-  max-width: 9.5em; padding: 2px 6px; border: none; border-radius: 4px;
+  field-sizing: content; /* as wide as the chosen value, not the longest option */
+  max-width: 11em; padding: 2px 6px; border: none; border-radius: 4px;
   font: inherit; font-size: 0.86em; color: var(--vh-quiet); background: transparent;
   text-overflow: ellipsis; cursor: pointer;
 }
 .option-select:hover { color: var(--vh-text); background: var(--vh-tint); }
 .option-toggle { display: inline-flex; align-items: center; gap: 4px; padding: 0 4px; font-size: 0.86em; color: var(--vh-quiet); white-space: nowrap; }
+.option-toggle input { margin: 0; accent-color: var(--vh-accent); }
 
 /* The mic: the panel's one bold element. */
 .mic {

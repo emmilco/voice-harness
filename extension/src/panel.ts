@@ -98,6 +98,7 @@ export class HarnessPanel implements vscode.Disposable, TabServices {
   readonly editor: EditorControl;
   readonly tracker: EditorTracker;
   private readonly diffs = new DiffView();
+  private readonly configWatch: vscode.Disposable;
   private disposed = false;
 
   static readonly VIEW_ID = "voiceHarness.view";
@@ -201,6 +202,9 @@ export class HarnessPanel implements vscode.Disposable, TabServices {
     host.webview.html = this.html();
     host.webview.onDidReceiveMessage((m: FromWebview) => this.onMessage(m));
     host.onDidDispose(() => this.dispose());
+    this.configWatch = vscode.workspace.onDidChangeConfiguration((e) => {
+      if (e.affectsConfiguration("voiceHarness.readingFont")) this.postReadingFont();
+    });
   }
 
   private get active(): ChatTab | undefined {
@@ -412,6 +416,7 @@ export class HarnessPanel implements vscode.Disposable, TabServices {
     }
     switch (m.type) {
       case "ready":
+        this.postReadingFont();
         this.startVoice();
         if (!this.tabs.size) this.newTab();
         else this.postTabs();
@@ -689,6 +694,11 @@ export class HarnessPanel implements vscode.Disposable, TabServices {
     this.voice.listenStart();
   }
 
+  private postReadingFont(): void {
+    const font = vscode.workspace.getConfiguration("voiceHarness").get<string>("readingFont", "serif") === "sans" ? "sans" : "serif";
+    this.postPanel({ type: "reading", font });
+  }
+
   private setVoice(state: VoiceUiState, detail?: string): void {
     this.voiceState = state;
     this.voiceDetail = detail;
@@ -780,6 +790,7 @@ export class HarnessPanel implements vscode.Disposable, TabServices {
     this.editor.dispose();
     this.tracker.dispose();
     this.diffs.dispose();
+    this.configWatch.dispose();
   }
 }
 

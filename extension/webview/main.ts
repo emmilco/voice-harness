@@ -13,12 +13,16 @@ declare function acquireVsCodeApi(): {
 const vscode = acquireVsCodeApi();
 
 // Raw HTML in agent output is escaped, never rendered.
+// Typographer for curly quotes in prose (code is left as written). Its dash and ellipsis
+// replacements are off: they would turn command-line flags like --verbose into an en dash.
 const md = new MarkdownIt({
   html: false,
   linkify: true,
+  typographer: true,
   breaks: false,
   highlight: (code, language) => highlight(code, language) ?? "",
 });
+md.disable("replacements");
 const defaultFence = md.renderer.rules.fence!;
 md.renderer.rules.fence = (tokens, idx, options, env, self) => {
   const token = tokens[idx];
@@ -559,7 +563,8 @@ function renderOptions(v: TabView): void {
       box.type = "checkbox";
       box.checked = o.current === "on";
       box.addEventListener("change", () => vscode.postMessage({ type: "setOption", tabId: v.id, id: o.id, value: box.checked ? "on" : "off" }));
-      label.append(box, document.createTextNode(` ${o.name}`));
+      label.title = o.name;
+      label.append(box, document.createTextNode(" Fast"));
       optionsEl.appendChild(label);
       continue;
     }
@@ -877,6 +882,9 @@ function applyPanel(m: PanelMessage): void {
       break;
     case "focusInput":
       input.focus();
+      break;
+    case "reading":
+      document.body.classList.toggle("reading-serif", m.font === "serif");
       break;
   }
 }

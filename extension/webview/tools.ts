@@ -86,7 +86,9 @@ export class ToolCards {
     const done = s.status === "completed";
     const failed = s.status === "failed";
     const mark = failed ? "✗" : done ? "✓" : "…";
-    const seconds = s.endedAt ? ((s.endedAt - s.startedAt) / 1000).toFixed(1) + " s" : "";
+    // Durations under a tenth of a second (including replayed history) say nothing useful.
+    const elapsed = s.endedAt ? (s.endedAt - s.startedAt) / 1000 : 0;
+    const seconds = elapsed >= 0.1 ? `${elapsed.toFixed(1)} s` : "";
     s.header.replaceChildren(
       el("span", "tool-icon", ICONS[s.kind ?? "other"] ?? ICONS.other),
       el("span", "tool-title", s.title ?? "Tool"),
