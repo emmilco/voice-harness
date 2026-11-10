@@ -41,7 +41,7 @@ function viewHost(view: vscode.WebviewView): HarnessHost {
   };
 }
 
-const TAB_REQUESTS = new Set(["send", "stop", "restart", "permission", "figureResult", "setOption", "unqueue", "sendNow", "rewind"]);
+const TAB_REQUESTS = new Set(["send", "stop", "restart", "permission", "figureResult", "setOption", "unqueue", "sendNow", "rewind", "showStep"]);
 
 /**
  * The chat panel: a set of conversation tabs (each its own agent session) sharing one voice
@@ -75,6 +75,14 @@ export class HarnessPanel implements vscode.Disposable, TabServices {
   );
   /** Editor effects waiting for speech to reach their place, keyed by voice marker id. */
   private readonly pendingMarks = new Map<number, () => void>();
+  /** Sentences sent to the voice process and not yet finished, in order, with the bubble each belongs to. */
+  private spoken: { id: number; tabId: string; ref?: string }[] = [];
+  private nowSpeaking: { tabId: string; ref?: string } | undefined;
+  /**
+   * While the user records a turn started with Talk, the visible tab's speech and editor effects
+   * wait here: dropped if the recording is sent (it replaces the turn), replayed if it is discarded.
+   */
+  private held: (() => void)[] | null = null;
   readonly editor: EditorControl;
   readonly tracker: EditorTracker;
   private readonly diffs = new DiffView();
@@ -195,10 +203,48 @@ export class HarnessPanel implements vscode.Disposable, TabServices {
     return missing.length ? { missing } : { nodePath: nodePath!, claudePath: claudePath!, agentEntry, mcpServerScript };
   }
 
-  speak(tab: ChatTab, sentences: string[]): void {
+  speak(tab: ChatTab, sentences: string[], ref?: string): void {
     if (!this.isActive(tab) || !this.voice || !this.speakReplies || !sentences.length) return;
-    for (const s of sentences) this.voice.speak(s);
+    if (this.held) {
+      this.held.push(() => this.speak(tab, sentences, ref));
+      return;
+    }
+    for (const s of sentences) this.spoken.push({ id: this.voice.speak(s), tabId: tab.id, ref });
     this.speechPending = true;
+  }
+
+  approvalRequested(tab: ChatTab): void {
+    this.voice?.cue();
+    if (!this.isActive(tab)) this.postPanel({ type: "notice", text: `“${tab.summary().label}” is waiting for your approval.` });
+  }
+
+  /** Marks the bubble being read aloud: the oldest sentence still playing. */
+  private updateNowSpeaking(): void {
+    const next = this.spoken[0];
+    const current = next ? { tabId: next.tabId, ref: next.ref } : undefined;
+    if (current?.tabId === this.nowSpeaking?.tabId && current?.ref === this.nowSpeaking?.ref) return;
+    if (this.nowSpeaking) this.post({ type: "nowSpeaking", tabId: this.nowSpeaking.tabId, ref: null });
+    this.nowSpeaking = current;
+    if (current?.ref) this.post({ type: "nowSpeaking", tabId: current.tabId, ref: current.ref });
+  }
+
+  /** Stops all speech and forgets what was queued. */
+  private stopVoiceOutput(): void {
+    this.voice?.stopSpeaking();
+    this.pendingMarks.clear();
+    this.speechPending = false;
+    this.spoken = [];
+    this.updateNowSpeaking();
+  }
+
+  /** Replays speech and editor effects held during a recording that was discarded. */
+  private releaseHeld(): void {
+    const held = this.held;
+    this.held = null;
+    if (held?.length) {
+      this.postPanel({ type: "notice", text: "Recording discarded; Claude's reply continues aloud." });
+      for (const action of held) action();
+    }
   }
 
   /**
@@ -208,6 +254,10 @@ export class HarnessPanel implements vscode.Disposable, TabServices {
    */
   inStepWithSpeech(tab: ChatTab, effect: () => void): void {
     if (!this.isActive(tab)) return;
+    if (this.held) {
+      this.held.push(() => this.inStepWithSpeech(tab, effect));
+      return;
+    }
     if (!this.voice || !this.speakReplies || this.voiceState === "loading" || this.voiceState === "unavailable") {
       effect();
       return;
@@ -218,9 +268,8 @@ export class HarnessPanel implements vscode.Disposable, TabServices {
   silence(tab: ChatTab): void {
     if (!this.isActive(tab)) return;
     this.awaitingReply = false;
-    this.speechPending = false;
-    this.pendingMarks.clear();
-    this.voice?.stopSpeaking();
+    this.held = null;
+    this.stopVoiceOutput();
   }
 
   turnFinished(tab: ChatTab): void {
@@ -249,9 +298,8 @@ export class HarnessPanel implements vscode.Disposable, TabServices {
   private activate(id: string): void {
     const previous = this.active;
     if (previous && previous.id !== id) {
-      this.voice?.stopSpeaking();
-      this.pendingMarks.clear();
-      this.speechPending = false;
+      this.held = null;
+      this.stopVoiceOutput();
       this.awaitingReply = false;
       if (this.autoTurn.running || this.voiceState === "listening" || this.voiceState === "warming") this.cancelListening();
       if (this.conversation) {
@@ -302,8 +350,17 @@ export class HarnessPanel implements vscode.Disposable, TabServices {
       if (request.type === "send" || request.type === "sendNow") {
         if (this.autoTurn.running && this.isActive(tab)) this.cancelListening();
       }
-      if (request.type === "stop" && this.isActive(tab) && (this.voiceState === "listening" || this.voiceState === "warming")) {
-        this.cancelListening();
+      if (request.type === "stop" && this.isActive(tab)) {
+        // While recording, the button is Discard: it throws the recording away and nothing else.
+        if (this.voiceState === "listening" || this.voiceState === "warming") {
+          this.cancelListening();
+          return;
+        }
+        if (!tab.busy) {
+          // The turn is over but its reply may still be playing: Stop silences it.
+          this.stopVoiceOutput();
+          return;
+        }
       }
       await tab.handle(request);
       return;
@@ -327,11 +384,7 @@ export class HarnessPanel implements vscode.Disposable, TabServices {
         break;
       case "toggleSpeak":
         this.speakReplies = !this.speakReplies;
-        if (!this.speakReplies) {
-          this.voice?.stopSpeaking();
-          this.pendingMarks.clear();
-          this.speechPending = false;
-        }
+        if (!this.speakReplies) this.stopVoiceOutput();
         this.postVoice();
         break;
       case "listFiles":
@@ -428,6 +481,9 @@ export class HarnessPanel implements vscode.Disposable, TabServices {
         this.voice = undefined;
         this.pendingMarks.clear();
         this.speechPending = false;
+        this.spoken = [];
+        this.updateNowSpeaking();
+        this.held = null;
         this.autoTurn.stop();
         this.output.appendLine(reason);
         if (this.disposed) return;
@@ -477,9 +533,12 @@ export class HarnessPanel implements vscode.Disposable, TabServices {
         break;
       case "speechActive":
         if (this.voiceState !== "listening") this.setVoice("speaking");
+        this.updateNowSpeaking();
         break;
       case "speechIdle":
         this.speechPending = false;
+        this.spoken = [];
+        this.updateNowSpeaking();
         if (this.voiceState === "speaking") this.setVoice("idle");
         if (!this.active?.busy) this.maybeListenForReply();
         break;
@@ -503,13 +562,19 @@ export class HarnessPanel implements vscode.Disposable, TabServices {
         this.autoTurn.stop();
         this.setVoice("idle", mic());
         this.postPanel({ type: "partial", text: "", source: null });
-        if (e.text) void this.active?.send(e.text, true);
-        else this.postPanel({ type: "notice", text: "Didn't catch anything." });
+        if (e.text) {
+          this.held = null;
+          void this.active?.send(e.text, true);
+        } else {
+          this.postPanel({ type: "notice", text: "Didn't catch anything." });
+          this.releaseHeld();
+        }
         break;
       case "listenCancelled":
         this.autoTurn.stop();
         this.setVoice("idle", mic());
         this.postPanel({ type: "partial", text: "", source: null });
+        this.releaseHeld();
         break;
       case "bargeIn":
         this.setVoice("interrupted");
@@ -527,13 +592,18 @@ export class HarnessPanel implements vscode.Disposable, TabServices {
         }
         break;
       }
+      case "spoke": {
+        const index = this.spoken.findIndex((s) => s.id === e.id);
+        if (index >= 0) this.spoken.splice(0, index + 1);
+        this.updateNowSpeaking();
+        break;
+      }
       case "marked": {
         const effect = this.pendingMarks.get(e.id);
         this.pendingMarks.delete(e.id);
         effect?.();
         break;
       }
-      case "spoke":
       case "rendered":
       case "voices":
         break;
@@ -565,8 +635,9 @@ export class HarnessPanel implements vscode.Disposable, TabServices {
     }
     this.awaitingReply = false;
     if (this.voiceState === "warming") return;
-    // Whatever the agent says next belongs to the turn being replaced.
-    this.active?.silence();
+    // Hold the reply while the user speaks: dropped if they send, resumed if they discard.
+    this.stopVoiceOutput();
+    this.held = [];
     this.voice.listenStart();
   }
 

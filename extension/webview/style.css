@@ -343,3 +343,11 @@ body.vscode-light .hljs-deletion { color: #a31515; }
 .log[hidden] { display: none; }
 .rewind { display: block; margin-top: 6px; padding: 1px 8px; font-size: 0.8em; opacity: 0; transition: opacity 0.1s; }
 .message.user:hover .rewind { opacity: 1; }
+
+.status.approval { color: var(--vscode-charts-orange); font-weight: 600; }
+.message.speaking { box-shadow: inset 3px 0 0 var(--vscode-charts-green); }
+.step-ref {
+  display: block; padding: 0; margin-bottom: 4px; border: none; background: transparent; cursor: pointer; text-align: left;
+  font-size: 0.8em; font-family: var(--vscode-editor-font-family); color: var(--vscode-textLink-foreground);
+}
+.step-ref:hover { text-decoration: underline; background: transparent; }

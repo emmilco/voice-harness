@@ -6,6 +6,7 @@ import Foundation
 /// - `mark` {id}: queue a marker; `marked` {id} is emitted when playback reaches it.
 /// - `render` {id, text, voice?, path}: synthesize to a 24 kHz 16-bit WAV file; emits `rendered`.
 /// - `listVoices`: emits `voices` with the English voice names.
+/// - `cue`: plays the attention chime.
 /// - `stopSpeaking`: drop queued and playing speech.
 /// - `pauseSpeaking` / `resumeSpeaking`: pause or continue playback.
 /// - `listenStart`: stop any speech, play the start tone, begin a user turn.

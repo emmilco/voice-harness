@@ -90,6 +90,10 @@ class TabView {
   commands: { name: string; description: string; hint?: string }[] = [];
   private agentText = "";
   private agentBubble: HTMLElement | null = null;
+  private agentSegment = "";
+  /** Bubbles and steps that can be marked as "being read aloud", by ref. */
+  private readonly spokenRefs = new Map<string, HTMLElement>();
+  private speakingEl: HTMLElement | undefined;
   private renderQueued = false;
   private readonly tools = new ToolCards(md, openDiff);
   private readonly permissionCards = new Map<string, HTMLElement>();
@@ -124,6 +128,11 @@ class TabView {
     if (this.agentBubble) this.renderAgent();
     this.agentBubble = null;
     this.agentText = "";
+    this.agentSegment = "";
+  }
+
+  get awaitingApproval(): boolean {
+    return this.permissionCards.size > 0;
   }
 
   /** Applies a message about this conversation. */
@@ -161,8 +170,11 @@ class TabView {
         break;
       }
       case "agentText":
-        if (!this.agentBubble) {
+        if (!this.agentBubble || m.segment !== this.agentSegment) {
+          this.endAgentMessage();
           this.agentBubble = div("message agent");
+          this.agentSegment = m.segment;
+          this.spokenRefs.set(m.segment, this.agentBubble);
           this.append(this.agentBubble);
         }
         this.agentText += m.chunk;
@@ -219,7 +231,15 @@ class TabView {
         this.endAgentMessage();
         const bubble = div("message agent step");
         const lines = m.startLine === m.endLine ? `line ${m.startLine}` : `lines ${m.startLine}–${m.endLine}`;
-        bubble.appendChild(div("step-ref", `${m.file} · ${lines}`));
+        const refButton = document.createElement("button");
+        refButton.className = "step-ref";
+        refButton.textContent = `${m.file} · ${lines}`;
+        refButton.title = "Show these lines in the editor again";
+        refButton.addEventListener("click", () =>
+          vscode.postMessage({ type: "showStep", tabId: this.id, path: m.path, startLine: m.startLine, endLine: m.endLine }),
+        );
+        bubble.appendChild(refButton);
+        this.spokenRefs.set(m.ref, bubble);
         const body = div("step-body");
         body.innerHTML = md.render(m.text);
         bubble.appendChild(body);
@@ -259,6 +279,11 @@ class TabView {
         else this.earlyRows.set(m.id, m.rows);
         break;
       }
+      case "nowSpeaking":
+        this.speakingEl?.classList.remove("speaking");
+        this.speakingEl = m.ref ? this.spokenRefs.get(m.ref) : undefined;
+        this.speakingEl?.classList.add("speaking");
+        break;
       case "options":
         this.options = m.options;
         break;
@@ -304,6 +329,8 @@ class TabView {
         this.liveCharts.clear();
         this.earlyRows.clear();
         this.queuedBubbles.clear();
+        this.spokenRefs.clear();
+        this.speakingEl = undefined;
         this.title = "";
         this.usage = undefined;
         break;
@@ -380,7 +407,10 @@ function renderActiveHeader(): void {
   if (!v) return;
   status.className = `status ${v.state}`;
   const showWorking = () => (status.textContent = `Claude is working… ${Math.floor((Date.now() - v.busySince) / 1000)} s`);
-  if (v.state === "busy") {
+  if (v.awaitingApproval) {
+    status.className = "status approval";
+    status.textContent = "Waiting for your approval";
+  } else if (v.state === "busy") {
     showWorking();
     busyTimer = setInterval(showWorking, 1000);
   } else {
@@ -569,13 +599,14 @@ const VOICE_LABELS: Record<string, string> = {
   loading: "Voice loading…",
   idle: "Voice ready",
   warming: "Starting mic…",
-  listening: "● Listening — press Send (or Ctrl+Shift+Space) when done",
+  listening: "● Listening — press Done (or Ctrl+Shift+Space) when finished",
   speaking: "Speaking",
   interrupted: "Paused — you're speaking",
   unavailable: "Voice unavailable",
 };
 let voiceUsable = false;
 let listening = false;
+let speaking = false;
 const meter = document.createElement("span");
 meter.className = "meter";
 
@@ -586,14 +617,14 @@ function updateControls(): void {
   sendButton.disabled = !ready;
   sendButton.textContent = busy ? "Queue" : "Send";
   sendButton.title = busy ? "Claude is working; this message waits for the current turn to finish" : "Send (Enter)";
-  stopButton.disabled = !busy && !listening;
+  stopButton.disabled = !busy && !listening && !speaking;
   input.disabled = !ready;
   talkButton.disabled = !ready || !voiceUsable;
-  talkButton.textContent = listening ? "■ Send" : "🎙 Talk";
-  talkButton.title = listening ? "Send what you said (Ctrl+Shift+Space)" : "Start talking (Ctrl+Shift+Space)";
+  talkButton.textContent = listening ? "■ Done" : "🎙 Talk";
+  talkButton.title = listening ? "Finish and send what you said (Ctrl+Shift+Space)" : "Start talking (Ctrl+Shift+Space)";
   talkButton.classList.toggle("listening", listening);
   stopButton.textContent = listening ? "✕ Discard" : "Stop";
-  stopButton.title = listening ? "Throw away this recording" : "Stop Claude";
+  stopButton.title = listening ? "Throw away this recording" : busy ? "Stop Claude" : "Stop speaking";
 }
 
 function send(): void {
@@ -625,6 +656,7 @@ function applyPanel(m: PanelMessage): void {
     case "voice": {
       voiceUsable = m.microphone && m.state !== "loading" && m.state !== "unavailable";
       listening = m.state === "listening";
+      speaking = m.state === "speaking";
       document.getElementById("conversation")!.textContent = m.conversation ? "💬 Conversation on" : "💬 Conversation off";
       voiceChip.className = `voice ${m.state}`;
       voiceChip.textContent =
@@ -678,7 +710,7 @@ window.addEventListener("message", (event: MessageEvent<ToWebview>) => {
   const m = event.data;
   if ("tabId" in m) {
     view(m.tabId).apply(m);
-    if (m.tabId === activeId && ["state", "options", "usage", "title", "clear"].includes(m.type)) renderActiveHeader();
+    if (m.tabId === activeId && ["state", "options", "usage", "title", "clear", "permission", "permissionDone"].includes(m.type)) renderActiveHeader();
   } else {
     applyPanel(m);
   }

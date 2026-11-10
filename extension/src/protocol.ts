@@ -30,7 +30,10 @@ export interface TabSummary {
 export type TabMessage = { tabId: string } & (
   | { type: "state"; state: SessionState; detail?: string }
   | { type: "user"; text: string; spoken: boolean; context?: string; attachments?: string[]; turn?: number }
-  | { type: "agentText"; chunk: string }
+  /** `segment` groups text into one bubble; a new segment starts a new bubble. */
+  | { type: "agentText"; chunk: string; segment: string }
+  /** The bubble or step now being read aloud (null: nothing). */
+  | { type: "nowSpeaking"; ref: string | null }
   | { type: "turnEnd"; stopReason: string }
   | {
       type: "tool";
@@ -53,7 +56,7 @@ export type TabMessage = { tabId: string } & (
       options: { optionId: string; name: string; kind: string }[];
     }
   | { type: "permissionDone"; requestId: string }
-  | { type: "step"; file: string; startLine: number; endLine: number; text: string }
+  | { type: "step"; ref: string; path: string; file: string; startLine: number; endLine: number; text: string }
   | { type: "figure"; id: string; kind: "vega-lite" | "mermaid" | "svg" | "image"; content: string; caption?: string; live?: boolean }
   | { type: "figureData"; id: string; rows: Record<string, unknown>[] }
   | { type: "options"; options: ConfigOptionView[] }
@@ -93,6 +96,8 @@ export type TabRequest = { tabId: string } & (
   | { type: "sendNow"; id: string }
   /** Roll the conversation back to just before the user's message number `turn`. */
   | { type: "rewind"; turn: number }
+  /** Highlight a walkthrough step's lines again. */
+  | { type: "showStep"; path: string; startLine: number; endLine: number }
 );
 
 export type PanelRequest =

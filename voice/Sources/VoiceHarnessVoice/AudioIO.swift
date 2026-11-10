@@ -148,10 +148,19 @@ final class AudioIO {
 
     /// A short rising two-note chime marking the start of listening.
     func playStartTone() {
+        playNotes([660.0, 990.0])
+    }
+
+    /// A short falling two-note chime: something needs the user's attention.
+    func playAttentionTone() {
+        playNotes([880.0, 587.0])
+    }
+
+    private func playNotes(_ frequencies: [Double]) {
         let rate = AudioIO.speechRate
         let noteLength = Int(rate * 0.09)
         var samples: [Float] = []
-        for frequency in [660.0, 990.0] {
+        for frequency in frequencies {
             for i in 0..<noteLength {
                 let t = Double(i) / rate
                 let envelope = min(1.0, Double(i) / 240.0) * min(1.0, Double(noteLength - i) / 600.0)

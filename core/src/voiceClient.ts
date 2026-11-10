@@ -100,6 +100,11 @@ export class VoiceClient {
     return id;
   }
 
+  /** Plays the attention chime (e.g. an approval is waiting). */
+  cue(): void {
+    this.send({ cmd: "cue" });
+  }
+
   stopSpeaking(): void {
     this.send({ cmd: "stopSpeaking" });
   }

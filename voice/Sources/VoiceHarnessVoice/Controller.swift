@@ -72,6 +72,8 @@ actor Controller {
                     Events.emit("error", ["id": id, "message": "render failed for \(voice): \(error.localizedDescription)"])
                 }
             }
+        case "cue":
+            audio.playAttentionTone()
         case "listVoices":
             Events.emit("voices", ["voices": KokoroAneVariant.english.knownVoices])
         case "stopSpeaking":

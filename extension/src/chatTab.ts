@@ -38,8 +38,10 @@ export interface TabServices {
   agentPaths(): { nodePath: string; claudePath: string; agentEntry: string; mcpServerScript: string } | { missing: string[] };
   post(message: TabMessage): void;
   isActive(tab: ChatTab): boolean;
-  /** Speaks the sentences if this tab is the visible one and speech is on. */
-  speak(tab: ChatTab, sentences: string[]): void;
+  /** Speaks the sentences if this tab is the visible one and speech is on; `ref` names the bubble they belong to. */
+  speak(tab: ChatTab, sentences: string[], ref?: string): void;
+  /** A permission request arrived in this tab. */
+  approvalRequested(tab: ChatTab): void;
   /** Applies an editor effect when speech reaches this point (visible tab only; dropped otherwise). */
   inStepWithSpeech(tab: ChatTab, effect: () => void): void;
   /** Stops speech belonging to this tab. */
@@ -77,6 +79,10 @@ export class ChatTab {
   /** The user's messages in order, each with the assistant message just before it (its rewind point). */
   private turns: { text: string; before?: string }[] = [];
   private lastAssistantId: string | undefined;
+  /** The bubble agent text currently flows into; cleared when a tool call, step or turn end splits the reply. */
+  private segment: string | undefined;
+  private segmentCount = 0;
+  private stepCount = 0;
   private disposed = false;
 
   constructor(private readonly services: TabServices) {}
@@ -172,6 +178,9 @@ export class ChatTab {
       case "rewind":
         await this.rewind(m.turn);
         break;
+      case "showStep":
+        if (this.services.isActive(this)) void this.services.editor.showCode({ path: m.path, startLine: m.startLine, endLine: m.endLine });
+        break;
     }
   }
 
@@ -210,10 +219,11 @@ export class ChatTab {
           onText: (chunk, messageId) => {
             this.flushReplayedUser();
             if (messageId) this.lastAssistantId = messageId;
-            this.post({ type: "agentText", chunk });
+            this.segment ??= `s${++this.segmentCount}`;
+            this.post({ type: "agentText", chunk, segment: this.segment });
             if (!this.replaying) {
               this.noteOutput();
-              this.speak(this.chunker.push(chunk));
+              this.speak(this.chunker.push(chunk), this.segment);
             }
           },
           onUserText: (chunk) => {
@@ -233,8 +243,12 @@ export class ChatTab {
               isUpdate,
             });
             if (t.locations.length) this.noteProject(t.locations[0].path);
+            // Display tools keep the bubble but speak what came before them first, so their highlight follows it.
+            if (!isUpdate) {
+              if (t.name?.startsWith("mcp__harness__")) this.speak(this.chunker.flush(), this.segment);
+              else this.endSegment();
+            }
             if (this.replaying) return;
-            if (!isUpdate) this.speak(this.chunker.flush());
             if (t.locations.length && (t.kind === "read" || t.kind === "edit") && this.services.isActive(this)) {
               void this.services.editor.follow(t.locations);
             }
@@ -255,6 +269,7 @@ export class ChatTab {
           onExit: (reason) => {
             this.session = undefined;
             this.resolveAllPermissions();
+            for (const q of this.queue.splice(0)) this.post({ type: "dequeued", id: q.id });
             this.setState("stopped", `${reason}. Use Restart to begin a new session.`);
           },
         },
@@ -306,7 +321,7 @@ export class ChatTab {
       let finishedNormally = false;
       try {
         const stopReason = await session.prompt(prompt, attachments);
-        this.speak(this.chunker.flush());
+        this.endSegment();
         this.post({ type: "turnEnd", stopReason });
         finishedNormally = stopReason === "end_turn" && !this.suppressSpeech;
       } catch (err) {
@@ -342,9 +357,15 @@ export class ChatTab {
     this.services.silence(this);
   }
 
-  private speak(sentences: string[]): void {
+  private speak(sentences: string[], ref?: string): void {
     if (this.suppressSpeech || this.replaying) return;
-    this.services.speak(this, sentences);
+    this.services.speak(this, sentences, ref);
+  }
+
+  /** Ends the current text bubble: its unfinished sentence is spoken and later text starts a new one. */
+  private endSegment(): void {
+    this.speak(this.chunker.flush(), this.segment);
+    this.segment = undefined;
   }
 
   // MARK: Rewind
@@ -460,9 +481,12 @@ export class ChatTab {
 
   /** One walkthrough step: its words in the chat, its highlight as speech reaches it, then its words spoken. */
   private presentStep(step: ExplainStep): void {
-    this.speak(this.chunker.flush());
+    this.endSegment();
+    const ref = `step${++this.stepCount}`;
     this.post({
       type: "step",
+      ref,
+      path: step.range.path,
       file: path.relative(this.services.workspace, step.range.path),
       startLine: step.range.startLine,
       endLine: step.range.endLine,
@@ -470,7 +494,7 @@ export class ChatTab {
     });
     this.services.inStepWithSpeech(this, () => void this.services.editor.showCode(step.range));
     const words = new SpeechChunker();
-    this.speak([...words.push(step.say + "\n"), ...words.flush()]);
+    this.speak([...words.push(step.say + "\n"), ...words.flush()], ref);
   }
 
   // MARK: Figures
@@ -563,8 +587,10 @@ export class ChatTab {
       };
       this.pendingPermissions.set(requestId, finish);
       signal.addEventListener("abort", () => finish(null), { once: true });
+      this.endSegment();
       this.post({ type: "permission", requestId, title: req.title, kind: req.kind, content: req.content, options: req.options });
       this.services.changed(this);
+      this.services.approvalRequested(this);
     });
   }
 
