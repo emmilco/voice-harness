@@ -4,9 +4,15 @@ import { expressionInterpreter } from "vega-interpreter";
 
 export type FigureKind = "vega-lite" | "mermaid" | "svg" | "image";
 
-const dark = () => document.body.classList.contains("vscode-dark") || document.body.classList.contains("vscode-high-contrast");
+const dark = () => {
+  const c = document.body.classList;
+  return c.contains("vscode-dark") || (c.contains("vscode-high-contrast") && !c.contains("vscode-high-contrast-light"));
+};
 
 let mermaidReady = false;
+// VS Code changes the body's theme class when the colour theme changes; diagrams drawn after
+// that should use the new theme.
+new MutationObserver(() => (mermaidReady = false)).observe(document.body, { attributes: true, attributeFilter: ["class"] });
 let mermaidCount = 0;
 
 /** For a live chart: replaces the rows of its "live" dataset. */
@@ -27,12 +33,14 @@ export type LiveUpdater = (rows: Record<string, unknown>[]) => Promise<void>;
 export async function renderFigure(target: HTMLElement, kind: FigureKind, content: string): Promise<LiveUpdater | undefined> {
   switch (kind) {
     case "vega-lite": {
-      let spec: unknown;
+      let spec: Record<string, unknown>;
       try {
         spec = JSON.parse(content);
       } catch (err) {
         throw new Error(`content is not valid JSON: ${(err as Error).message}`);
       }
+      // A single view without an explicit width fills the panel rather than overflowing it.
+      if (spec && typeof spec === "object" && ("mark" in spec || "layer" in spec) && !("width" in spec)) spec.width = "container";
       const embedded = await vegaEmbed(target, spec as never, {
         actions: false,
         renderer: "svg",

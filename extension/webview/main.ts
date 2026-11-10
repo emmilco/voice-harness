@@ -129,6 +129,17 @@ class TabView {
     this.scrollToEnd();
   }
 
+  /** A start failure or agent exit, with a way to start over. */
+  private showProblem(detail: string): void {
+    const card = div("notice error problem", detail);
+    const restart = document.createElement("button");
+    restart.className = "secondary";
+    restart.textContent = "↺ Restart this conversation";
+    restart.addEventListener("click", () => vscode.postMessage({ type: "restart", tabId: this.id }));
+    card.appendChild(restart);
+    this.append(card);
+  }
+
   private showEmptyState(): void {
     const card = div("empty-state");
     card.appendChild(div("empty-title", "Ask about the code, typed or aloud."));
@@ -175,6 +186,7 @@ class TabView {
         if (m.state === "busy" && this.state !== "busy") this.busySince = Date.now();
         this.state = m.state;
         this.detail = m.detail ?? "";
+        if ((m.state === "error" || m.state === "stopped") && m.detail) this.showProblem(m.detail);
         break;
       case "user": {
         this.endAgentMessage();
@@ -298,6 +310,7 @@ class TabView {
         block.appendChild(canvas);
         if (m.caption) block.appendChild(div("figure-caption", m.caption));
         if (m.live) block.classList.add("live");
+        block.dataset.figure = m.id;
         this.append(block);
         renderFigure(canvas, m.kind, m.content).then(
           (update) => {
@@ -318,6 +331,10 @@ class TabView {
         );
         break;
       }
+      case "figureStopped":
+        this.liveCharts.delete(m.id);
+        this.log.querySelector(`[data-figure="${m.id}"]`)?.classList.remove("live");
+        break;
       case "figureData": {
         const update = this.liveCharts.get(m.id);
         if (update) void update(m.rows);
@@ -423,6 +440,10 @@ function renderTabs(tabs: TabSummary[]): void {
     const tab = document.createElement("div");
     tab.className = "tab" + (t.id === activeId ? " active" : "") + (t.busy ? " busy" : "");
     tab.title = t.label;
+    tab.setAttribute("role", "tab");
+    tab.setAttribute("aria-selected", String(t.id === activeId));
+    tab.tabIndex = t.id === activeId ? 0 : -1;
+    tab.dataset.id = t.id;
     const mark = t.needsApproval ? "⚠ " : t.unread ? "• " : t.busy ? "… " : "";
     const label = div("tab-label", mark + t.label);
     if (t.needsApproval) label.classList.add("attention");
@@ -439,9 +460,24 @@ function renderTabs(tabs: TabSummary[]): void {
     tab.addEventListener("click", () => {
       if (t.id !== activeId) vscode.postMessage({ type: "switchTab", id: t.id });
     });
+    tab.addEventListener("keydown", (e) => {
+      const all = [...tabList.querySelectorAll<HTMLElement>(".tab")];
+      const i = all.indexOf(tab);
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        if (t.id !== activeId) vscode.postMessage({ type: "switchTab", id: t.id });
+      } else if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
+        e.preventDefault();
+        const next = all[(i + (e.key === "ArrowRight" ? 1 : -1) + all.length) % all.length];
+        next.focus();
+        vscode.postMessage({ type: "switchTab", id: next.dataset.id! });
+      }
+    });
     tabList.appendChild(tab);
   }
-  tabList.querySelector(".tab.active")?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  const activeTab = tabList.querySelector<HTMLElement>(".tab.active");
+  activeTab?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  if (document.activeElement?.classList.contains("tab")) activeTab?.focus();
 }
 
 let busyTimer: ReturnType<typeof setInterval> | undefined;
@@ -461,7 +497,9 @@ function renderActiveHeader(): void {
     showWorking();
     busyTimer = setInterval(showWorking, 1000);
   } else {
-    status.textContent = v.state === "ready" ? `Ready — ${v.detail}` : v.detail || v.state;
+    const short: Record<string, string> = { ready: "Ready", starting: "Starting…", error: "Couldn't start (see below)", stopped: "Stopped (see below)" };
+    status.textContent = v.state === "starting" && v.detail ? v.detail : (short[v.state] ?? v.state);
+    status.title = v.detail;
   }
   titleEl.textContent = v.title;
   titleEl.hidden = !v.title;
@@ -497,7 +535,7 @@ function renderOptions(v: TabView): void {
     select.className = "option-select";
     select.title = o.name;
     for (const c of o.choices) {
-      const opt = new Option(`${o.name}: ${c.name}`, c.value, false, c.value === o.current);
+      const opt = new Option(o.id === "model" ? c.name : `${o.name.toLowerCase()}: ${c.name}`, c.value, false, c.value === o.current);
       if (c.description) opt.title = c.description;
       select.add(opt);
     }
@@ -763,8 +801,13 @@ function applyPanel(m: PanelMessage): void {
       for (const item of m.items) {
         const row = document.createElement("button");
         row.className = "session-item" + (item.openInTab ? " current" : "");
-        row.appendChild(div("session-title", item.title));
-        row.appendChild(div("session-time", item.openInTab ? "open in a tab" : relativeTime(item.updatedAt)));
+        const name = document.createElement("span");
+        name.className = "session-title";
+        name.textContent = item.title;
+        const when = document.createElement("span");
+        when.className = "session-time";
+        when.textContent = item.openInTab ? "open in a tab" : relativeTime(item.updatedAt);
+        row.append(name, when);
         row.addEventListener("click", () => {
           sessionMenu.hidden = true;
           vscode.postMessage({ type: "openSession", id: item.id });
@@ -826,6 +869,12 @@ document.getElementById("sessions")!.addEventListener("click", () => {
   vscode.postMessage({ type: "listSessions" });
 });
 document.getElementById("session-close")!.addEventListener("click", () => (sessionMenu.hidden = true));
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && !sessionMenu.hidden) {
+    sessionMenu.hidden = true;
+    input.focus();
+  }
+});
 document.getElementById("session-new")!.addEventListener("click", () => {
   sessionMenu.hidden = true;
   vscode.postMessage({ type: "newTab" });

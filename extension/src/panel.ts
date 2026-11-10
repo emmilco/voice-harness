@@ -721,12 +721,12 @@ export class HarnessPanel implements vscode.Disposable, TabServices {
 <title>Voice Harness</title>
 </head>
 <body>
-<nav id="tabs" class="tabs"><div id="tab-list" class="tab-list"></div><button id="new-tab" class="tab-new secondary" title="New conversation">+</button></nav>
+<nav id="tabs" class="tabs"><div id="tab-list" class="tab-list" role="tablist" aria-label="Conversations"></div><button id="new-tab" class="tab-new secondary" title="New conversation">+</button></nav>
 <header>
   <div id="title" class="conversation-title" hidden></div>
-  <div id="status" class="status starting">Starting…</div>
-  <div id="session-bar" class="session-bar"><span id="options" class="options"></span><span id="usage" class="usage"></span></div>
-  <div id="voice" class="voice loading">Voice loading…</div>
+  <div class="status-row"><div id="status" class="status starting" role="status" aria-live="polite">Starting…</div><span id="usage" class="usage"></span></div>
+  <div id="session-bar" class="session-bar"><span id="options" class="options"></span></div>
+  <div id="voice" class="voice loading" aria-live="polite">Speech loading…</div>
 </header>
 <div id="logs" class="logs"></div>
 <div id="partial" class="partial" hidden></div>

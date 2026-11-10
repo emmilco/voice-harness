@@ -527,6 +527,7 @@ export class ChatTab {
       const [oldest, timer] = this.liveCharts.entries().next().value!;
       clearInterval(timer);
       this.liveCharts.delete(oldest);
+      this.post({ type: "figureStopped", id: oldest });
     }
     let lastSeen = "";
     const tick = () => {

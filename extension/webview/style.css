@@ -294,14 +294,14 @@ footer { position: relative; }
 .hljs-title.class_, .hljs-type { color: #4ec9b0; }
 .hljs-variable, .hljs-params, .hljs-attr, .hljs-property { color: #9cdcfe; }
 .hljs-deletion { color: #f48771; }
-body.vscode-light .hljs-keyword, body.vscode-light .hljs-selector-tag, body.vscode-light .hljs-literal, body.vscode-light .hljs-built_in { color: #0000ff; }
-body.vscode-light .hljs-string, body.vscode-light .hljs-attr-value, body.vscode-light .hljs-template-string, body.vscode-light .hljs-addition { color: #a31515; }
-body.vscode-light .hljs-number, body.vscode-light .hljs-symbol { color: #098658; }
-body.vscode-light .hljs-comment, body.vscode-light .hljs-quote, body.vscode-light .hljs-meta { color: #008000; }
-body.vscode-light .hljs-title, body.vscode-light .hljs-title.function_, body.vscode-light .hljs-section { color: #795e26; }
-body.vscode-light .hljs-title.class_, body.vscode-light .hljs-type { color: #267f99; }
-body.vscode-light .hljs-variable, body.vscode-light .hljs-params, body.vscode-light .hljs-attr, body.vscode-light .hljs-property { color: #001080; }
-body.vscode-light .hljs-deletion { color: #a31515; }
+body.vscode-light .hljs-keyword, body.vscode-high-contrast-light .hljs-keyword, body.vscode-light .hljs-selector-tag, body.vscode-high-contrast-light .hljs-selector-tag, body.vscode-light .hljs-literal, body.vscode-high-contrast-light .hljs-literal, body.vscode-light .hljs-built_in, body.vscode-high-contrast-light .hljs-built_in { color: #0000ff; }
+body.vscode-light .hljs-string, body.vscode-high-contrast-light .hljs-string, body.vscode-light .hljs-attr-value, body.vscode-high-contrast-light .hljs-attr-value, body.vscode-light .hljs-template-string, body.vscode-high-contrast-light .hljs-template-string, body.vscode-light .hljs-addition, body.vscode-high-contrast-light .hljs-addition { color: #a31515; }
+body.vscode-light .hljs-number, body.vscode-high-contrast-light .hljs-number, body.vscode-light .hljs-symbol, body.vscode-high-contrast-light .hljs-symbol { color: #098658; }
+body.vscode-light .hljs-comment, body.vscode-high-contrast-light .hljs-comment, body.vscode-light .hljs-quote, body.vscode-high-contrast-light .hljs-quote, body.vscode-light .hljs-meta, body.vscode-high-contrast-light .hljs-meta { color: #008000; }
+body.vscode-light .hljs-title, body.vscode-high-contrast-light .hljs-title, body.vscode-light .hljs-title.function_, body.vscode-high-contrast-light .hljs-title.function_, body.vscode-light .hljs-section, body.vscode-high-contrast-light .hljs-section { color: #795e26; }
+body.vscode-light .hljs-title.class_, body.vscode-high-contrast-light .hljs-title.class_, body.vscode-light .hljs-type, body.vscode-high-contrast-light .hljs-type { color: #267f99; }
+body.vscode-light .hljs-variable, body.vscode-high-contrast-light .hljs-variable, body.vscode-light .hljs-params, body.vscode-high-contrast-light .hljs-params, body.vscode-light .hljs-attr, body.vscode-high-contrast-light .hljs-attr, body.vscode-light .hljs-property, body.vscode-high-contrast-light .hljs-property { color: #001080; }
+body.vscode-light .hljs-deletion, body.vscode-high-contrast-light .hljs-deletion { color: #a31515; }
 
 .image-tray { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 6px; }
 .image-tray:empty { display: none; }
@@ -348,3 +348,15 @@ body.vscode-light .hljs-deletion { color: #a31515; }
 .tab.busy .tab-label { font-style: italic; }
 button.toggle.on { color: var(--vscode-button-foreground); background: var(--vscode-button-background); }
 .session-restart { margin: 4px 8px 8px; }
+
+/* Hover-only controls show on keyboard focus too. */
+.code-block:focus-within .copy-code, .copy-code:focus-visible { opacity: 1; }
+.message.user:focus-within .rewind, .rewind:focus-visible { opacity: 1; }
+.tab-close:focus-visible, .tab:focus-within .tab-close { opacity: 0.7; }
+.tab:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: -1px; }
+
+.status-row { display: flex; align-items: baseline; gap: 8px; padding-right: 12px; }
+.status-row .status { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border-bottom: none; }
+.problem { white-space: pre-wrap; }
+.problem button { display: block; margin-top: 6px; }
+.figure-body .vega-embed { width: 100%; }

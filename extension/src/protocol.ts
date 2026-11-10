@@ -59,6 +59,8 @@ export type TabMessage = { tabId: string } & (
   | { type: "step"; ref: string; path: string; file: string; startLine: number; endLine: number; text: string }
   | { type: "figure"; id: string; kind: "vega-lite" | "mermaid" | "svg" | "image"; content: string; caption?: string; live?: boolean }
   | { type: "figureData"; id: string; rows: Record<string, unknown>[] }
+  /** A live chart stopped following its data file. */
+  | { type: "figureStopped"; id: string }
   | { type: "options"; options: ConfigOptionView[] }
   | { type: "usage"; used: number; size: number }
   | { type: "title"; title: string }
