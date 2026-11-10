@@ -4,17 +4,18 @@ import type MarkdownItConstructor from "markdown-it";
 type MarkdownIt = InstanceType<typeof MarkdownItConstructor>;
 import type { ToolContentView } from "../src/protocol";
 
+/** Monochrome glyphs (they take the text colour), one per kind of tool call. */
 const ICONS: Record<string, string> = {
-  execute: "▶",
-  read: "📄",
-  edit: "✏️",
-  delete: "🗑",
+  execute: "$",
+  read: "≡",
+  edit: "✎",
+  delete: "⌫",
   move: "↦",
-  search: "🔍",
-  fetch: "🌐",
-  think: "💭",
+  search: "⌕",
+  fetch: "⇣",
+  think: "∴",
   switch_mode: "⇄",
-  other: "⚙",
+  other: "•",
 };
 
 interface ToolState {

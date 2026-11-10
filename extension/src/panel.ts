@@ -41,6 +41,18 @@ function viewHost(view: vscode.WebviewView): HarnessHost {
   };
 }
 
+/** Inline icons (24×24 strokes in the current text colour), so the UI does not depend on emoji. */
+const ICONS = {
+  mic: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/></svg>',
+  send: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M6 11l6-6 6 6"/></svg>',
+  stop: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="1.5"/></svg>',
+  close: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7l10 10M17 7L7 17"/></svg>',
+  plus: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>',
+  list: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7h14M5 12h14M5 17h9"/></svg>',
+  headphones: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 15v-3a8 8 0 0 1 16 0v3"/><rect x="3.5" y="14" width="4" height="6" rx="1.5"/><rect x="16.5" y="14" width="4" height="6" rx="1.5"/></svg>',
+  speaker: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 9.5h3l4.5-4v13l-4.5-4H5z"/><path class="wave" d="M16 9a4.5 4.5 0 0 1 0 6M18.5 6.5a8 8 0 0 1 0 11"/></svg>',
+};
+
 const TAB_REQUESTS = new Set(["send", "stop", "restart", "permission", "figureResult", "setOption", "unqueue", "sendNow", "rewind", "showStep"]);
 
 /**
@@ -721,30 +733,36 @@ export class HarnessPanel implements vscode.Disposable, TabServices {
 <title>Voice Harness</title>
 </head>
 <body>
-<nav id="tabs" class="tabs"><div id="tab-list" class="tab-list" role="tablist" aria-label="Conversations"></div><button id="new-tab" class="tab-new secondary" title="New conversation">+</button></nav>
-<header>
+<nav id="tabs" class="tabs">
+  <div id="tab-list" class="tab-list" role="tablist" aria-label="Conversations"></div>
+  <button id="sessions" class="icon-button" title="Past conversations in this folder" aria-label="Past conversations">${ICONS.list}</button>
+  <button id="new-tab" class="icon-button" title="New conversation" aria-label="New conversation">${ICONS.plus}</button>
+</nav>
+<header class="head">
   <div id="title" class="conversation-title" hidden></div>
-  <div class="status-row"><div id="status" class="status starting" role="status" aria-live="polite">Starting…</div><span id="usage" class="usage"></span></div>
-  <div id="session-bar" class="session-bar"><span id="options" class="options"></span></div>
-  <div id="voice" class="voice loading" aria-live="polite">Speech loading…</div>
+  <span id="usage" class="usage"></span>
 </header>
-<div id="logs" class="logs"></div>
-<div id="partial" class="partial" hidden></div>
 <div id="session-menu" class="session-menu" hidden>
-  <div class="session-menu-head"><span>Conversations in this folder</span><button id="session-new" class="secondary">+ New conversation</button><button id="session-close" class="secondary" title="Close">✕</button></div>
+  <div class="session-menu-head"><span>Conversations in this folder</span><button id="session-new" class="text-button">New conversation</button><button id="session-close" class="icon-button" title="Close" aria-label="Close">${ICONS.close}</button></div>
   <div id="session-list" class="session-list"></div>
-  <button id="restart" class="secondary session-restart" title="Clear this conversation and start it over with a fresh session">↺ Restart this conversation</button>
+  <button id="restart" class="text-button session-restart" title="Clear this conversation and start it over with a fresh session">Restart this conversation</button>
 </div>
-<footer>
-  <textarea id="input" rows="3" placeholder="Ask about the code… (Enter to send, Shift+Enter for a new line, Ctrl+Shift+Space to talk)"></textarea>
-  <div class="buttons">
-    <button id="talk" title="Ctrl+Shift+Space">🎙 Talk</button>
-    <button id="send">Send</button>
-    <button id="stop" class="secondary">Stop</button>
+<div id="logs" class="logs"></div>
+<footer class="composer">
+  <div class="statusline">
+    <span id="status" class="status starting" role="status" aria-live="polite">Starting…</span>
+    <span id="voice" class="voice loading" aria-live="polite">Speech loading…</span>
+  </div>
+  <div id="partial" class="partial" hidden></div>
+  <textarea id="input" rows="1" placeholder="Ask about the code, or press the mic to talk"></textarea>
+  <div class="toolbar">
+    <button id="talk" class="mic" title="Talk (Ctrl+Shift+Space)" aria-label="Talk">${ICONS.mic}<span class="mic-ring" aria-hidden="true"></span></button>
+    <span id="session-bar" class="session-bar"><span id="options" class="options"></span></span>
     <span class="spacer"></span>
-    <button id="sessions" class="secondary" title="Past conversations in this folder; open one in a new tab">☰ Conversations</button>
-    <button id="conversation" class="secondary toggle" aria-pressed="false" title="Auto-listen: after Claude finishes speaking, the mic opens for your answer and a pause sends it">🎧 Auto-listen</button>
-    <button id="speak" class="secondary toggle" aria-pressed="false" title="Speak Claude's replies aloud">🔊 Speak replies</button>
+    <button id="conversation" class="icon-button toggle" aria-pressed="false" title="Auto-listen: after Claude finishes speaking, the mic opens for your answer and a pause sends it" aria-label="Auto-listen">${ICONS.headphones}</button>
+    <button id="speak" class="icon-button toggle" aria-pressed="false" title="Speak Claude's replies aloud" aria-label="Speak replies">${ICONS.speaker}</button>
+    <button id="stop" class="icon-button" title="Stop" aria-label="Stop">${ICONS.stop}</button>
+    <button id="send" class="send" title="Send (Enter)" aria-label="Send">${ICONS.send}</button>
   </div>
 </footer>
 <script nonce="${nonce}" src="${asset("webview.js")}"></script>

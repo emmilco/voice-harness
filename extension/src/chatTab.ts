@@ -115,6 +115,8 @@ export class ChatTab {
     return {
       id: this.id,
       label: this.project ? `${this.project} · ${title}` : title,
+      project: this.project,
+      title,
       busy: this.busy,
       unread: this.unread,
       needsApproval: this.pendingPermissions.size > 0,
@@ -442,7 +444,8 @@ export class ChatTab {
     const relative = path.relative(this.services.workspace, file);
     if (relative.startsWith("..") || path.isAbsolute(relative)) return;
     const first = relative.split(path.sep)[0];
-    if (!first || first === relative) return;
+    // Hidden folders (.claude, .git, .vscode) hold tooling, not projects.
+    if (!first || first === relative || first.startsWith(".")) return;
     if (first !== this.project) {
       this.project = first;
       this.services.changed(this);

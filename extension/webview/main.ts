@@ -23,7 +23,10 @@ const defaultFence = md.renderer.rules.fence!;
 md.renderer.rules.fence = (tokens, idx, options, env, self) => {
   const token = tokens[idx];
   if (token.info.trim() === "onscreen") {
-    return `<div class="onscreen" title="Shown, not spoken">${md.render(token.content)}</div>`;
+    // Supporting detail (status lines, checks): collapsed under its first line, shown not spoken.
+    const first = token.content.split("\n").find((l) => l.trim()) ?? "Details";
+    const summary = first.replace(/[*_`#>[\]]/g, "").trim();
+    return `<details class="onscreen"><summary title="Shown, not spoken">${md.utils.escapeHtml(summary.length > 90 ? summary.slice(0, 88) + "…" : summary)}</summary><div class="onscreen-body">${md.render(token.content)}</div></details>`;
   }
   return `<div class="code-block"><button class="copy-code" title="Copy">Copy</button>${defaultFence(tokens, idx, options, env, self)}</div>`;
 };
@@ -134,7 +137,7 @@ class TabView {
     const card = div("notice error problem", detail);
     const restart = document.createElement("button");
     restart.className = "secondary";
-    restart.textContent = "↺ Restart this conversation";
+    restart.textContent = "Restart this conversation";
     restart.addEventListener("click", () => vscode.postMessage({ type: "restart", tabId: this.id }));
     card.appendChild(restart);
     this.append(card);
@@ -144,12 +147,12 @@ class TabView {
     const card = div("empty-state");
     card.appendChild(div("empty-title", "Ask about the code, typed or aloud."));
     const tips = [
-      "🎙 Talk: Ctrl+Shift+Space, or the Talk button; press Done when finished",
-      "🎧 With auto-listen on, just answer after Claude speaks; a pause sends",
-      "/ for commands and skills · @ to attach a file · paste or drop images",
-      "↑ in an empty box recalls earlier messages",
-      "Typed messages wait while Claude works; Talk interrupts instead",
-      "Hover over one of your messages to rewind the conversation to it",
+      "Press the mic (Ctrl+Shift+Space) to talk; press it again when you're done.",
+      "With auto-listen on, just answer after Claude speaks; a pause sends.",
+      "Type / for commands and skills, @ to attach a file; paste or drop images.",
+      "Press ↑ in an empty box to recall earlier messages.",
+      "Messages you type while Claude works wait their turn; talking interrupts.",
+      "Hover over one of your messages to rewind the conversation to it.",
     ];
     const list = document.createElement("ul");
     for (const tip of tips) {
@@ -161,10 +164,32 @@ class TabView {
     this.log.appendChild(card);
   }
 
+  /** Paragraphs already rendered into the bubble, by the length of agent text they cover. */
+  private stableLength = 0;
+  private stableEl: HTMLElement | null = null;
+  private tailEl: HTMLElement | null = null;
+
+  /**
+   * Renders streamed text without rebuilding the whole bubble: finished paragraphs (up to the
+   * last blank line outside a code fence) are rendered once; only the paragraph still being
+   * written is re-rendered.
+   */
   private renderAgent(): void {
     this.renderQueued = false;
     if (!this.agentBubble) return;
-    this.agentBubble.innerHTML = md.render(this.agentText);
+    if (!this.stableEl || !this.tailEl) {
+      this.stableEl = div("md-stable");
+      this.tailEl = div("md-tail");
+      this.agentBubble.replaceChildren(this.stableEl, this.tailEl);
+    }
+    const cut = stableCut(this.agentText);
+    if (cut > this.stableLength) {
+      const block = document.createElement("div");
+      block.innerHTML = md.render(this.agentText.slice(this.stableLength, cut));
+      this.stableEl.append(...block.childNodes);
+      this.stableLength = cut;
+    }
+    this.tailEl.innerHTML = md.render(this.agentText.slice(this.stableLength));
     this.scrollToEnd();
   }
 
@@ -173,6 +198,9 @@ class TabView {
     this.agentBubble = null;
     this.agentText = "";
     this.agentSegment = "";
+    this.stableLength = 0;
+    this.stableEl = null;
+    this.tailEl = null;
   }
 
   get awaitingApproval(): boolean {
@@ -225,8 +253,9 @@ class TabView {
         }
         this.agentText += m.chunk;
         if (!this.renderQueued) {
+          // About ten renders a second: smooth enough to read, cheap enough not to stutter.
           this.renderQueued = true;
-          requestAnimationFrame(() => this.renderAgent());
+          setTimeout(() => requestAnimationFrame(() => this.renderAgent()), 90);
         }
         break;
       case "turnEnd": {
@@ -401,6 +430,7 @@ class TabView {
       case "prefill":
         if (this.id === activeId) {
           input.value = m.text;
+          autosize();
           input.focus();
           input.setSelectionRange(input.value.length, input.value.length);
         }
@@ -444,10 +474,11 @@ function renderTabs(tabs: TabSummary[]): void {
     tab.setAttribute("aria-selected", String(t.id === activeId));
     tab.tabIndex = t.id === activeId ? 0 : -1;
     tab.dataset.id = t.id;
-    const mark = t.needsApproval ? "⚠ " : t.unread ? "• " : t.busy ? "… " : "";
-    const label = div("tab-label", mark + t.label);
-    if (t.needsApproval) label.classList.add("attention");
-    else if (t.unread) label.classList.add("unread");
+    const label = div("tab-label");
+    if (t.needsApproval) label.appendChild(div("tab-mark attention", "!"));
+    else if (t.unread) label.appendChild(div("tab-mark unread"));
+    if (t.project) label.appendChild(div("tab-project", t.project));
+    label.appendChild(div("tab-title", t.title));
     const close = document.createElement("button");
     close.className = "tab-close";
     close.textContent = "✕";
@@ -489,7 +520,7 @@ function renderActiveHeader(): void {
   busyTimer = undefined;
   if (!v) return;
   status.className = `status ${v.state}`;
-  const showWorking = () => (status.textContent = `Claude is working… ${Math.floor((Date.now() - v.busySince) / 1000)} s`);
+  const showWorking = () => (status.textContent = `Working · ${Math.floor((Date.now() - v.busySince) / 1000)} s`);
   if (v.awaitingApproval) {
     status.className = "status approval";
     status.textContent = "Waiting for your approval";
@@ -497,10 +528,11 @@ function renderActiveHeader(): void {
     showWorking();
     busyTimer = setInterval(showWorking, 1000);
   } else {
-    const short: Record<string, string> = { ready: "Ready", starting: "Starting…", error: "Couldn't start (see below)", stopped: "Stopped (see below)" };
+    const short: Record<string, string> = { ready: "", starting: "Starting…", error: "Couldn't start (see below)", stopped: "Stopped (see below)" };
     status.textContent = v.state === "starting" && v.detail ? v.detail : (short[v.state] ?? v.state);
     status.title = v.detail;
   }
+  refreshStatusline();
   titleEl.textContent = v.title;
   titleEl.hidden = !v.title;
   renderOptions(v);
@@ -508,7 +540,7 @@ function renderActiveHeader(): void {
     const { used, size } = v.usage;
     const k = (n: number) => (n >= 1_000_000 ? `${(n / 1_000_000).toFixed(n % 1_000_000 ? 1 : 0)}M` : `${Math.round(n / 1000)}k`);
     const ratio = size ? used / size : 0;
-    usageEl.textContent = `context ${k(used)} / ${k(size)}`;
+    usageEl.textContent = `${k(used)} / ${k(size)}`;
     usageEl.title = `${used.toLocaleString()} of ${size.toLocaleString()} tokens (${Math.round(ratio * 100)}%)`;
     usageEl.classList.toggle("high", ratio > 0.8);
   } else {
@@ -553,6 +585,7 @@ function showTab(id: string): void {
   }
   const next = view(id);
   input.value = next.draft;
+  autosize();
   pendingImages.push(...next.draftImages.splice(0));
   renderImageTray();
   activeId = id;
@@ -689,41 +722,61 @@ function walkHistory(e: KeyboardEvent): boolean {
 
 // MARK: Voice state
 
+/** What the speech line says in each voice state; idle says nothing. */
 const VOICE_LABELS: Record<string, string> = {
   loading: "Speech loading…",
-  idle: "Speech ready",
+  idle: "",
   warming: "Starting mic…",
-  listening: "● Listening — press Done (or Ctrl+Shift+Space) when finished",
+  listening: "Listening. Press the mic when you're done.",
   speaking: "Speaking",
-  interrupted: "Paused — you're speaking",
+  interrupted: "Paused while you speak",
   unavailable: "Speech unavailable",
 };
+const ICON_STOP = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="1.5"/></svg>';
+const ICON_DISCARD = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7l10 10M17 7L7 17"/></svg>';
+
+/** Shows the status line only while it has something to say. */
+function refreshStatusline(): void {
+  const line = status.parentElement!;
+  line.hidden = !status.textContent && !voiceChip.textContent;
+}
+
+/** The message box grows with its content, up to about eight lines. */
+function autosize(): void {
+  input.style.height = "auto";
+  input.style.height = `${Math.min(input.scrollHeight, 180)}px`;
+}
+input.addEventListener("input", autosize);
 let voiceUsable = false;
 let voiceUnavailableReason = "";
 let listening = false;
 let speaking = false;
-const meter = document.createElement("span");
-meter.className = "meter";
+let micTitle = "";
 
 function updateControls(): void {
   const v = activeView();
   const ready = !!v && (v.state === "ready" || v.state === "busy");
   const busy = v?.state === "busy";
   sendButton.disabled = !ready;
-  sendButton.textContent = busy ? "Queue" : "Send";
-  sendButton.title = busy ? "Claude is working; this message waits for the current turn to finish" : "Send (Enter)";
+  sendButton.classList.toggle("queue", busy);
+  sendButton.title = busy ? "Queue: sends when Claude finishes (Enter)" : "Send (Enter)";
+  sendButton.setAttribute("aria-label", busy ? "Queue" : "Send");
   stopButton.disabled = !busy && !listening && !speaking;
+  stopButton.innerHTML = listening ? ICON_DISCARD : ICON_STOP;
+  const stopLabel = listening ? "Discard this recording" : busy ? "Stop Claude" : "Stop speaking";
+  stopButton.title = `${stopLabel} (Ctrl+Shift+Backspace)`;
+  stopButton.setAttribute("aria-label", stopLabel);
   input.disabled = !ready;
   talkButton.disabled = !ready || !voiceUsable;
-  talkButton.textContent = listening ? "■ Done" : "🎙 Talk";
-  talkButton.title = listening
-    ? "Finish and send what you said (Ctrl+Shift+Space)"
-    : voiceUsable
-      ? "Start talking (Ctrl+Shift+Space)"
-      : `Voice input unavailable: ${voiceUnavailableReason || "microphone not available"}`;
   talkButton.classList.toggle("listening", listening);
-  stopButton.textContent = listening ? "✕ Discard" : "Stop";
-  stopButton.title = listening ? "Throw away this recording" : busy ? "Stop Claude" : "Stop speaking";
+  talkButton.classList.toggle("speaking", speaking);
+  const talkLabel = listening
+    ? "Done: send what you said"
+    : voiceUsable
+      ? "Talk"
+      : `Voice input unavailable: ${voiceUnavailableReason || "microphone not available"}`;
+  talkButton.title = `${talkLabel} (Ctrl+Shift+Space)${micTitle && voiceUsable ? ` · ${micTitle}` : ""}`;
+  talkButton.setAttribute("aria-label", talkLabel);
 }
 
 function send(): void {
@@ -732,6 +785,7 @@ function send(): void {
   if (!v || (!text && !pendingImages.length) || !(v.state === "ready" || v.state === "busy")) return;
   remember(text);
   input.value = "";
+  autosize();
   const images = pendingImages.splice(0).map(({ mimeType, data }) => ({ mimeType, data }));
   renderImageTray();
   vscode.postMessage({ type: "send", tabId: v.id, text: text || "(see attached image)", images });
@@ -757,15 +811,15 @@ function applyPanel(m: PanelMessage): void {
       listening = m.state === "listening";
       speaking = m.state === "speaking";
       const autoListen = document.getElementById("conversation")!;
-      autoListen.textContent = m.conversation ? "🎧 Auto-listen on" : "🎧 Auto-listen off";
       autoListen.classList.toggle("on", m.conversation);
       autoListen.setAttribute("aria-pressed", String(m.conversation));
+      autoListen.title = `Auto-listen is ${m.conversation ? "on" : "off"}: after Claude finishes speaking, the mic opens for your answer and a pause sends it`;
       voiceChip.className = `voice ${m.state}`;
+      micTitle = m.detail?.startsWith("mic: ") ? m.detail : "";
+      const shownDetail = m.detail && !m.detail.startsWith("mic: ") ? `: ${m.detail}` : "";
       voiceChip.textContent =
-        (m.state === "listening" && m.autoListening ? "● Listening for your reply — pause to send" : (VOICE_LABELS[m.state] ?? m.state)) +
-        (m.detail ? ` — ${m.detail}` : "");
-      meter.textContent = "";
-      if (m.state === "listening" || m.state === "interrupted") voiceChip.appendChild(meter);
+        (m.state === "listening" && m.autoListening ? "Listening for your reply. Pause to send." : (VOICE_LABELS[m.state] ?? m.state)) + (VOICE_LABELS[m.state] === "" ? "" : shownDetail);
+      if (m.state !== "listening" && m.state !== "interrupted") talkButton.style.setProperty("--level", "0");
       voiceUnavailableReason = m.state === "unavailable" ? (m.detail ?? "the voice process stopped") : m.state === "loading" ? "voice is still loading" : "";
       if (m.state === "unavailable") {
         const restart = document.createElement("button");
@@ -774,16 +828,17 @@ function applyPanel(m: PanelMessage): void {
         restart.addEventListener("click", () => vscode.postMessage({ type: "restartVoice" }));
         voiceChip.appendChild(restart);
       }
-      speakButton.textContent = m.speak ? "🔊 Speak replies" : "🔇 Replies muted";
       speakButton.classList.toggle("on", m.speak);
       speakButton.setAttribute("aria-pressed", String(m.speak));
+      speakButton.title = m.speak ? "Replies are spoken aloud (click to mute)" : "Replies are muted (click to speak them)";
       updateControls();
+      refreshStatusline();
       break;
     }
     case "level": {
-      // -60 dBFS (silence) .. 0 dBFS (loud) mapped to 0..10 bars.
-      const bars = Math.max(0, Math.min(10, Math.round((m.db + 60) / 6)));
-      meter.textContent = ` ${"▮".repeat(bars)}${"▯".repeat(10 - bars)}`;
+      // -60 dBFS (silence) .. -10 dBFS (loud speech) drives the mic's level ring, 0..1.
+      const level = Math.max(0, Math.min(1, (m.db + 60) / 50));
+      talkButton.style.setProperty("--level", level.toFixed(2));
       break;
     }
     case "partial":
@@ -824,6 +879,21 @@ function applyPanel(m: PanelMessage): void {
       input.focus();
       break;
   }
+}
+
+/** The end of the text that is safe to render once: the last blank line outside a code fence. */
+function stableCut(text: string): number {
+  let cut = 0;
+  let inFence = false;
+  let lineStart = 0;
+  for (let i = 0; i <= text.length; i++) {
+    if (i < text.length && text[i] !== "\n") continue;
+    const line = text.slice(lineStart, i);
+    if (/^\s*(```|~~~)/.test(line)) inFence = !inFence;
+    else if (!inFence && line.trim() === "" && i < text.length) cut = i + 1;
+    lineStart = i + 1;
+  }
+  return cut;
 }
 
 window.addEventListener("message", (event: MessageEvent<ToWebview>) => {
@@ -885,16 +955,16 @@ document.getElementById("conversation")!.addEventListener("click", () => vscode.
 let restartArmed: ReturnType<typeof setTimeout> | undefined;
 restartButton.addEventListener("click", () => {
   if (!restartArmed) {
-    restartButton.textContent = "↺ Click again to restart";
+    restartButton.textContent = "Click again to restart";
     restartArmed = setTimeout(() => {
       restartArmed = undefined;
-      restartButton.textContent = "↺ Restart this conversation";
+      restartButton.textContent = "Restart this conversation";
     }, 3000);
     return;
   }
   clearTimeout(restartArmed);
   restartArmed = undefined;
-  restartButton.textContent = "↺ Restart this conversation";
+  restartButton.textContent = "Restart this conversation";
   sessionMenu.hidden = true;
   if (activeId) vscode.postMessage({ type: "restart", tabId: activeId });
 });

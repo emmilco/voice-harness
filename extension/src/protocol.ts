@@ -18,7 +18,11 @@ export interface ConfigOptionView {
 
 export interface TabSummary {
   id: string;
+  /** "project · title", for tooltips and notices. */
   label: string;
+  /** The project folder the conversation works in, when known. */
+  project?: string;
+  title: string;
   busy: boolean;
   /** Output arrived while the tab was in the background. */
   unread: boolean;
