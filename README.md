@@ -33,14 +33,15 @@ Open a folder, then run **Voice Harness: Open Panel** from the command palette. 
 
 | Action | How |
 |---|---|
-| Reply hands-free | With 💬 Conversation on, the mic opens after Claude finishes speaking; pause to send |
-| Talk | `Ctrl+Shift+Space` or 🎙 Talk; press again (■ Send) when done |
+| Reply hands-free | With 🎧 Auto-listen on, the mic opens after Claude finishes speaking; a pause sends your answer |
+| Talk | `Ctrl+Shift+Space` or 🎙 Talk; press again (■ Done) when finished |
 | Discard a recording | ✕ Discard |
-| Stop Claude | Stop |
-| Mute replies | 🔊 Voice on / 🔇 Voice off |
-| Several conversations | **+** opens a tab; each tab is its own session and keeps working in the background (● new output, ⚠ waiting for approval). Switching tabs turns conversation mode off and discards an unsent recording |
+| Stop | Stop (or `Ctrl+Shift+Backspace`): discards a recording, stops Claude's turn, or silences a reply still being spoken |
+| Keyboard | Focus the message box `Ctrl+Shift+I`; next / previous conversation `Ctrl+Shift+]` / `[` |
+| Mute replies | 🔊 Speak replies / 🔇 Replies muted |
+| Several conversations | **+** opens a tab; each tab is its own session and keeps working in the background (● new output, ⚠ waiting for approval). Switching tabs turns auto-listen off and discards an unsent recording |
 | Rewind | Hover over one of your messages and choose **↶ Rewind**: the conversation returns to just before it, and the message comes back to the input box (code is not restored) |
-| Past conversations | ☰ Sessions lists conversations started in this folder (including terminal `claude` sessions) and opens them in a tab |
+| Past conversations | ☰ Conversations lists conversations started in this folder (including terminal `claude` sessions) and opens them in a tab |
 
 ## Settings
 
@@ -48,7 +49,7 @@ Open a folder, then run **Voice Harness: Open Panel** from the command palette. 
 |---|---|---|
 | `voiceHarness.voice` | `af_heart` | Kokoro voice. Hear them all with `node tools/voice-sampler/server.mjs`, then open http://127.0.0.1:4317 |
 | `voiceHarness.speakReplies` | `true` | Speak replies when the panel opens |
-| `voiceHarness.conversationMode` | `true` | After a spoken reply, listen for your answer; a pause (about 1.7 s, longer mid-sentence) ends it |
+| `voiceHarness.conversationMode` | `true` | Auto-listen: after a spoken reply, listen for your answer; a pause (about 1.7 s, longer mid-sentence) sends it |
 | `voiceHarness.sendEditorContext` | `true` | Send the open file, cursor and selection with each message |
 | `voiceHarness.autoInterrupt` | `false` | Pause speech automatically when you start talking over it |
 | `voiceHarness.echoCancellation` | `false` | macOS echo cancellation, for use with speakers instead of headphones |

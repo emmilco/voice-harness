@@ -18,7 +18,7 @@
       },
       {
         "command": "voiceHarness.restartSession",
-        "title": "Voice Harness: Restart Session"
+        "title": "Voice Harness: Restart Conversation"
       },
       {
         "command": "voiceHarness.toggleListening",
@@ -26,7 +26,7 @@
       },
       {
         "command": "voiceHarness.restartVoice",
-        "title": "Voice Harness: Restart Voice"
+        "title": "Voice Harness: Restart Speech"
       },
       {
         "command": "voiceHarness.focusInput",
@@ -61,27 +61,27 @@
         "voiceHarness.voice": {
           "type": "string",
           "default": "af_heart",
-          "description": "Kokoro voice for spoken replies."
+          "description": "Kokoro voice for spoken replies (hear them all with tools/voice-sampler). Run Voice Harness: Restart Speech to apply."
         },
         "voiceHarness.speakReplies": {
           "type": "boolean",
           "default": true,
-          "description": "Speak Claude's replies aloud when the panel opens."
+          "description": "Whether replies are spoken when the panel opens (the \ud83d\udd0a button toggles it)."
         },
         "voiceHarness.echoCancellation": {
           "type": "boolean",
           "default": false,
-          "description": "Use macOS voice processing to cancel the speech echo, for use without headphones. Takes effect when the panel is reopened."
+          "description": "Use macOS voice processing to cancel the speech echo, for use with speakers instead of headphones. Run Voice Harness: Restart Speech to apply."
         },
         "voiceHarness.modelsDirectory": {
           "type": "string",
           "default": "",
-          "description": "Folder for the speech models (downloaded on first use). Empty: ~/Library/Application Support/voice-harness/models."
+          "description": "Folder for the speech models (downloaded on first use). Empty: ~/Library/Application Support/voice-harness/models. Run Voice Harness: Restart Speech to apply."
         },
         "voiceHarness.autoInterrupt": {
           "type": "boolean",
           "default": false,
-          "description": "Pause Claude's speech automatically when you start talking over it. Off: speech stops only when you press Talk or Stop. Takes effect when the panel is reopened."
+          "description": "Pause Claude's speech automatically when you start talking over it. Off: speech stops only when you press Talk or Stop. Run Voice Harness: Restart Speech to apply."
         },
         "voiceHarness.sendEditorContext": {
           "type": "boolean",
@@ -91,7 +91,7 @@
         "voiceHarness.conversationMode": {
           "type": "boolean",
           "default": true,
-          "description": "After Claude finishes a spoken reply, open the microphone for your answer; a pause ends your turn. Turns you start with Talk still end with Send."
+          "description": "Auto-listen when the panel opens: after Claude finishes a spoken reply, the mic opens for your answer and a pause sends it (the \ud83c\udfa7 button toggles it). Turns started with Talk still end with Done."
         },
         "voiceHarness.location": {
           "type": "string",
@@ -100,7 +100,7 @@
             "editor"
           ],
           "default": "sidebar",
-          "description": "Where Voice Harness: Open Panel puts the chat: the secondary sidebar, or an editor tab beside your code."
+          "description": "Where Voice Harness: Open Panel puts the chat: the secondary sidebar, or an editor tab beside your code. Applies the next time the panel is opened."
         }
       }
     },

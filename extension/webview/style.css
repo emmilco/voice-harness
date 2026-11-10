@@ -22,12 +22,6 @@ body {
 .status.busy { color: var(--vscode-charts-blue); }
 .status.error, .status.stopped { color: var(--vscode-errorForeground); }
 
-#log {
-  flex: 1;
-  overflow-y: auto;
-  padding: 12px;
-}
-
 .message {
   margin: 0 0 12px;
   padding: 8px 12px;
@@ -66,13 +60,6 @@ body {
 .onscreen > :first-child { margin-top: 0; }
 .onscreen > :last-child { margin-bottom: 0; }
 
-.tool {
-  margin: 0 0 8px;
-  font-size: 0.85em;
-  color: var(--vscode-descriptionForeground);
-  font-family: var(--vscode-editor-font-family);
-}
-.tool::before { content: "⚙ "; }
 
 .permission {
   margin: 0 0 12px;
@@ -192,7 +179,7 @@ button.listening {
   font-family: var(--vscode-editor-font-family);
   color: var(--vscode-descriptionForeground);
 }
-.figure.live .figure-caption::before { content: "● live  "; color: var(--vscode-charts-green); }
+.figure.live .figure-caption::before { content: "⟳ live  "; color: var(--vscode-charts-green); }
 
 .session-menu {
   margin: 0 12px 8px;
@@ -357,3 +344,7 @@ body.vscode-light .hljs-deletion { color: #a31515; }
 .empty-state ul { margin: 0; padding-left: 18px; }
 .empty-state li { margin: 2px 0; }
 .voice-restart { margin-left: 8px; padding: 1px 8px; font-size: 0.9em; }
+
+.tab.busy .tab-label { font-style: italic; }
+button.toggle.on { color: var(--vscode-button-foreground); background: var(--vscode-button-background); }
+.session-restart { margin: 4px 8px 8px; }

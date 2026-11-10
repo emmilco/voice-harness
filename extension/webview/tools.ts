@@ -31,6 +31,11 @@ interface ToolState {
   body: HTMLElement;
 }
 
+/** The icon shown for a tool call of this kind. */
+export function toolIcon(kind: string | undefined): string {
+  return ICONS[kind ?? "other"] ?? ICONS.other;
+}
+
 export type OpenDiff = (path: string, oldText: string | null, newText: string) => void;
 
 /** Tool-call cards: a one-line header that expands to the call's output or diff. */

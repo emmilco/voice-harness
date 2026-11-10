@@ -525,11 +525,11 @@ export class HarnessPanel implements vscode.Disposable, TabServices {
         if (this.disposed) return;
         const delay = this.voiceRestarts.next();
         if (delay === null) {
-          this.setVoice("unavailable", `${reason}; it keeps stopping, so it was not restarted (Voice Harness: Restart Voice to try again)`);
+          this.setVoice("unavailable", `${reason}; it keeps stopping, so it was not restarted (Voice Harness: Restart Speech, or the Restart voice button, to try again)`);
           return;
         }
         this.setVoice("loading", "Voice stopped unexpectedly; restarting…");
-        this.postPanel({ type: "notice", text: "The voice process stopped unexpectedly and is restarting." });
+        this.postPanel({ type: "notice", text: "Speech stopped unexpectedly and is restarting." });
         setTimeout(() => {
           if (!this.disposed && !this.voice) this.startVoice();
         }, delay);
@@ -646,7 +646,7 @@ export class HarnessPanel implements vscode.Disposable, TabServices {
       case "error":
         if (this.voiceState === "warming") this.setVoice("idle", mic());
         this.output.appendLine(`voice error: ${e.message}`);
-        this.postPanel({ type: "notice", text: `Voice: ${e.message}` });
+        this.postPanel({ type: "notice", text: `Speech: ${e.message}` });
         break;
       case "fatal":
         this.output.appendLine(`voice fatal: ${e.message}`);
@@ -661,7 +661,7 @@ export class HarnessPanel implements vscode.Disposable, TabServices {
   /** Talk key: start a spoken turn in the visible tab, or end the one in progress. */
   private talk(): void {
     if (!this.voice || !this.microphone || this.voiceState === "loading" || this.voiceState === "unavailable") {
-      this.postPanel({ type: "notice", text: "Voice input isn't available yet." });
+      this.postPanel({ type: "notice", text: "Mic input isn't available yet." });
       return;
     }
     if (this.voiceState === "listening") {
@@ -731,8 +731,9 @@ export class HarnessPanel implements vscode.Disposable, TabServices {
 <div id="logs" class="logs"></div>
 <div id="partial" class="partial" hidden></div>
 <div id="session-menu" class="session-menu" hidden>
-  <div class="session-menu-head"><span>Conversations in this folder</span><button id="session-new" class="secondary">+ New tab</button><button id="session-close" class="secondary" title="Close">✕</button></div>
+  <div class="session-menu-head"><span>Conversations in this folder</span><button id="session-new" class="secondary">+ New conversation</button><button id="session-close" class="secondary" title="Close">✕</button></div>
   <div id="session-list" class="session-list"></div>
+  <button id="restart" class="secondary session-restart" title="Clear this conversation and start it over with a fresh session">↺ Restart this conversation</button>
 </div>
 <footer>
   <textarea id="input" rows="3" placeholder="Ask about the code… (Enter to send, Shift+Enter for a new line, Ctrl+Shift+Space to talk)"></textarea>
@@ -741,10 +742,9 @@ export class HarnessPanel implements vscode.Disposable, TabServices {
     <button id="send">Send</button>
     <button id="stop" class="secondary">Stop</button>
     <span class="spacer"></span>
-    <button id="sessions" class="secondary" title="Past conversations in this folder">☰ Sessions</button>
-    <button id="conversation" class="secondary" title="After Claude replies, listen for your answer; a pause ends it">💬 Conversation on</button>
-    <button id="speak" class="secondary" title="Speak Claude's replies">🔊 Voice on</button>
-    <button id="restart" class="secondary" title="Start this tab over with a new session">Restart</button>
+    <button id="sessions" class="secondary" title="Past conversations in this folder; open one in a new tab">☰ Conversations</button>
+    <button id="conversation" class="secondary toggle" aria-pressed="false" title="Auto-listen: after Claude finishes speaking, the mic opens for your answer and a pause sends it">🎧 Auto-listen</button>
+    <button id="speak" class="secondary toggle" aria-pressed="false" title="Speak Claude's replies aloud">🔊 Speak replies</button>
   </div>
 </footer>
 <script nonce="${nonce}" src="${asset("webview.js")}"></script>

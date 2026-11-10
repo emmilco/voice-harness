@@ -3,7 +3,7 @@ import type { ConfigOptionView, FromWebview, PanelMessage, SessionState, TabMess
 import { Completer } from "./completer";
 import { renderFigure, type LiveUpdater } from "./figures";
 import { highlight } from "./highlight";
-import { ToolCards, renderToolContent } from "./tools";
+import { ToolCards, renderToolContent, toolIcon } from "./tools";
 
 declare function acquireVsCodeApi(): {
   postMessage(message: FromWebview): void;
@@ -239,7 +239,7 @@ class TabView {
       case "permission": {
         this.endAgentMessage();
         const card = div("permission");
-        card.appendChild(div("permission-title", `Claude wants to run: ${m.title}${m.kind ? ` (${m.kind})` : ""}`));
+        card.appendChild(div("permission-title", `Claude wants to: ${toolIcon(m.kind)} ${m.title}`));
         if (m.content?.length) {
           const detail = div("permission-detail");
           renderToolContent(detail, m.content, md, openDiff);
@@ -423,7 +423,7 @@ function renderTabs(tabs: TabSummary[]): void {
     const tab = document.createElement("div");
     tab.className = "tab" + (t.id === activeId ? " active" : "") + (t.busy ? " busy" : "");
     tab.title = t.label;
-    const mark = t.needsApproval ? "⚠ " : t.unread ? "● " : t.busy ? "… " : "";
+    const mark = t.needsApproval ? "⚠ " : t.unread ? "• " : t.busy ? "… " : "";
     const label = div("tab-label", mark + t.label);
     if (t.needsApproval) label.classList.add("attention");
     else if (t.unread) label.classList.add("unread");
@@ -652,13 +652,13 @@ function walkHistory(e: KeyboardEvent): boolean {
 // MARK: Voice state
 
 const VOICE_LABELS: Record<string, string> = {
-  loading: "Voice loading…",
-  idle: "Voice ready",
+  loading: "Speech loading…",
+  idle: "Speech ready",
   warming: "Starting mic…",
   listening: "● Listening — press Done (or Ctrl+Shift+Space) when finished",
   speaking: "Speaking",
   interrupted: "Paused — you're speaking",
-  unavailable: "Voice unavailable",
+  unavailable: "Speech unavailable",
 };
 let voiceUsable = false;
 let voiceUnavailableReason = "";
@@ -718,7 +718,10 @@ function applyPanel(m: PanelMessage): void {
       voiceUsable = m.microphone && m.state !== "loading" && m.state !== "unavailable";
       listening = m.state === "listening";
       speaking = m.state === "speaking";
-      document.getElementById("conversation")!.textContent = m.conversation ? "💬 Conversation on" : "💬 Conversation off";
+      const autoListen = document.getElementById("conversation")!;
+      autoListen.textContent = m.conversation ? "🎧 Auto-listen on" : "🎧 Auto-listen off";
+      autoListen.classList.toggle("on", m.conversation);
+      autoListen.setAttribute("aria-pressed", String(m.conversation));
       voiceChip.className = `voice ${m.state}`;
       voiceChip.textContent =
         (m.state === "listening" && m.autoListening ? "● Listening for your reply — pause to send" : (VOICE_LABELS[m.state] ?? m.state)) +
@@ -733,7 +736,9 @@ function applyPanel(m: PanelMessage): void {
         restart.addEventListener("click", () => vscode.postMessage({ type: "restartVoice" }));
         voiceChip.appendChild(restart);
       }
-      speakButton.textContent = m.speak ? "🔊 Voice on" : "🔇 Voice off";
+      speakButton.textContent = m.speak ? "🔊 Speak replies" : "🔇 Replies muted";
+      speakButton.classList.toggle("on", m.speak);
+      speakButton.setAttribute("aria-pressed", String(m.speak));
       updateControls();
       break;
     }
@@ -827,7 +832,21 @@ document.getElementById("session-new")!.addEventListener("click", () => {
 });
 speakButton.addEventListener("click", () => vscode.postMessage({ type: "toggleSpeak" }));
 document.getElementById("conversation")!.addEventListener("click", () => vscode.postMessage({ type: "toggleConversation" }));
+/** Restart wipes the conversation, so it takes a second click within 3 seconds. */
+let restartArmed: ReturnType<typeof setTimeout> | undefined;
 restartButton.addEventListener("click", () => {
+  if (!restartArmed) {
+    restartButton.textContent = "↺ Click again to restart";
+    restartArmed = setTimeout(() => {
+      restartArmed = undefined;
+      restartButton.textContent = "↺ Restart this conversation";
+    }, 3000);
+    return;
+  }
+  clearTimeout(restartArmed);
+  restartArmed = undefined;
+  restartButton.textContent = "↺ Restart this conversation";
+  sessionMenu.hidden = true;
   if (activeId) vscode.postMessage({ type: "restart", tabId: activeId });
 });
 
