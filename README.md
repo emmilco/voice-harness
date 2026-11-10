@@ -38,6 +38,9 @@ Open a folder, then run **Voice Harness: Open Panel** from the command palette. 
 | Discard a recording | ✕ Discard |
 | Stop Claude | Stop |
 | Mute replies | 🔊 Voice on / 🔇 Voice off |
+| Several conversations | **+** opens a tab; each tab is its own session and keeps working in the background (● new output, ⚠ waiting for approval). Switching tabs turns conversation mode off and discards an unsent recording |
+| Rewind | Hover over one of your messages and choose **↶ Rewind**: the conversation returns to just before it, and the message comes back to the input box (code is not restored) |
+| Past conversations | ☰ Sessions lists conversations started in this folder (including terminal `claude` sessions) and opens them in a tab |
 
 ## Settings
 

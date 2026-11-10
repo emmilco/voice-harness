@@ -97,7 +97,8 @@ export interface SessionSummary {
 }
 
 export interface SessionHandlers {
-  onText(chunk: string): void;
+  /** Agent text; `messageId` identifies the assistant message it belongs to (a rewind point). */
+  onText(chunk: string, messageId?: string): void;
   /** Text of a user message, reported while a loaded session's history is replayed. */
   onUserText?(chunk: string): void;
   /** The session's settings, whenever they are first known or change. */
@@ -227,7 +228,7 @@ export class AgentSession {
         const u = ctx.params.update;
         switch (u.sessionUpdate) {
           case "agent_message_chunk":
-            if (u.content.type === "text") handlers.onText(u.content.text);
+            if (u.content.type === "text") handlers.onText(u.content.text, u.messageId ?? undefined);
             break;
           case "user_message_chunk":
             if (u.content.type === "text") handlers.onUserText?.(u.content.text);
@@ -393,6 +394,19 @@ export class AgentSession {
     return out
       .sort((a, b) => (b.updatedAt ?? "").localeCompare(a.updatedAt ?? ""))
       .slice(0, limit);
+  }
+
+  /**
+   * Creates a copy of this conversation that ends with the assistant message `messageId`
+   * (claude-agent-acp's fork-point extension); returns the new session's id. Load it to continue.
+   */
+  async forkAt(messageId: string): Promise<string> {
+    const forked = (await this.connection.agent.request(methods.agent.session.fork, {
+      ...this.sessionSetup,
+      sessionId: this.currentSessionId,
+      _meta: { jetbrains: { air: { fork: { version: 1, messageId } } } },
+    } as never)) as { sessionId: string };
+    return forked.sessionId;
   }
 
   /** Switches to a past session; its history is replayed through the handlers before this resolves. */

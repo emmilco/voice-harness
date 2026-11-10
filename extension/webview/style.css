@@ -321,3 +321,25 @@ body.vscode-light .hljs-deletion { color: #a31515; }
 .thumb { position: relative; width: 56px; height: 56px; border-radius: 4px; overflow: hidden; border: 1px solid var(--vscode-panel-border); }
 .thumb img { width: 100%; height: 100%; object-fit: cover; }
 .thumb-remove { position: absolute; top: 1px; right: 1px; padding: 0 4px; font-size: 0.75em; line-height: 1.3; }
+
+.tabs { display: flex; align-items: stretch; border-bottom: 1px solid var(--vscode-panel-border); background: var(--vscode-editorGroupHeader-tabsBackground, transparent); }
+.tab-list { display: flex; flex: 1; overflow-x: auto; scrollbar-width: none; }
+.tab {
+  display: flex; align-items: center; gap: 4px; max-width: 220px; min-width: 70px;
+  padding: 4px 4px 4px 10px; cursor: pointer; font-size: 0.85em;
+  border-right: 1px solid var(--vscode-panel-border);
+  color: var(--vscode-tab-inactiveForeground, var(--vscode-descriptionForeground));
+  background: var(--vscode-tab-inactiveBackground, transparent);
+}
+.tab.active { color: var(--vscode-tab-activeForeground, var(--vscode-foreground)); background: var(--vscode-tab-activeBackground, var(--vscode-editor-background)); box-shadow: inset 0 -2px 0 var(--vscode-focusBorder); }
+.tab-label { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tab-label.unread { color: var(--vscode-charts-blue); }
+.tab-label.attention { color: var(--vscode-charts-orange); }
+.tab-close { padding: 0 4px; font-size: 0.85em; background: transparent; color: inherit; opacity: 0; }
+.tab:hover .tab-close, .tab.active .tab-close { opacity: 0.7; }
+.tab-new { padding: 0 10px; border-radius: 0; }
+.logs { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+.log { flex: 1; overflow-y: auto; padding: 12px; }
+.log[hidden] { display: none; }
+.rewind { display: block; margin-top: 6px; padding: 1px 8px; font-size: 0.8em; opacity: 0; transition: opacity 0.1s; }
+.message.user:hover .rewind { opacity: 1; }

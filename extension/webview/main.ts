@@ -1,7 +1,7 @@
 import MarkdownIt from "markdown-it";
-import type { FromWebview, ToWebview } from "../src/protocol";
-import { renderFigure, type LiveUpdater } from "./figures";
+import type { ConfigOptionView, FromWebview, PanelMessage, SessionState, TabMessage, TabSummary, ToWebview } from "../src/protocol";
 import { Completer } from "./completer";
+import { renderFigure, type LiveUpdater } from "./figures";
 import { highlight } from "./highlight";
 import { ToolCards, renderToolContent } from "./tools";
 
@@ -39,8 +39,12 @@ document.addEventListener("click", (e) => {
   });
 });
 
-const log = document.getElementById("log")!;
+const logs = document.getElementById("logs")!;
 const status = document.getElementById("status")!;
+const titleEl = document.getElementById("title")!;
+const optionsEl = document.getElementById("options")!;
+const usageEl = document.getElementById("usage")!;
+const tabList = document.getElementById("tab-list")!;
 const input = document.getElementById("input") as HTMLTextAreaElement;
 const sendButton = document.getElementById("send") as HTMLButtonElement;
 const stopButton = document.getElementById("stop") as HTMLButtonElement;
@@ -51,6 +55,13 @@ const voiceChip = document.getElementById("voice")!;
 const partial = document.getElementById("partial")!;
 const sessionMenu = document.getElementById("session-menu")!;
 const sessionList = document.getElementById("session-list")!;
+
+function div(className: string, text?: string): HTMLElement {
+  const el = document.createElement("div");
+  el.className = className;
+  if (text !== undefined) el.textContent = text;
+  return el;
+}
 
 function relativeTime(iso?: string): string {
   if (!iso) return "";
@@ -63,49 +74,411 @@ function relativeTime(iso?: string): string {
   return days < 30 ? `${days} d ago` : new Date(iso).toLocaleDateString();
 }
 
-const VOICE_LABELS: Record<string, string> = {
-  loading: "Voice loading…",
-  idle: "Voice ready",
-  warming: "Starting mic…",
-  listening: "● Listening — press Send (or Ctrl+Shift+Space) when done",
-  speaking: "Speaking",
-  interrupted: "Paused — you're speaking",
-  unavailable: "Voice unavailable",
-};
+const openDiff = (path: string, oldText: string | null, newText: string) => vscode.postMessage({ type: "openDiff", path, oldText, newText });
+
+// MARK: One conversation's view
+
+/** Everything one tab shows: its transcript and its session bar state. */
+class TabView {
+  readonly log = div("log");
+  state: SessionState = "starting";
+  detail = "";
+  busySince = 0;
+  title = "";
+  options: ConfigOptionView[] = [];
+  usage: { used: number; size: number } | undefined;
+  commands: { name: string; description: string; hint?: string }[] = [];
+  private agentText = "";
+  private agentBubble: HTMLElement | null = null;
+  private renderQueued = false;
+  private readonly tools = new ToolCards(md, openDiff);
+  private readonly permissionCards = new Map<string, HTMLElement>();
+  private readonly liveCharts = new Map<string, LiveUpdater>();
+  private readonly queuedBubbles = new Map<string, HTMLElement>();
+  /** Rows that arrived before their chart finished rendering. */
+  private readonly earlyRows = new Map<string, Record<string, unknown>[]>();
+
+  constructor(readonly id: string) {
+    this.log.hidden = true;
+    logs.appendChild(this.log);
+  }
+
+  scrollToEnd(): void {
+    this.log.scrollTop = this.log.scrollHeight;
+  }
+
+  append(el: HTMLElement): void {
+    const nearBottom = this.log.scrollHeight - this.log.scrollTop - this.log.clientHeight < 80;
+    this.log.appendChild(el);
+    if (nearBottom) this.scrollToEnd();
+  }
+
+  private renderAgent(): void {
+    this.renderQueued = false;
+    if (!this.agentBubble) return;
+    this.agentBubble.innerHTML = md.render(this.agentText);
+    this.scrollToEnd();
+  }
+
+  endAgentMessage(): void {
+    if (this.agentBubble) this.renderAgent();
+    this.agentBubble = null;
+    this.agentText = "";
+  }
+
+  /** Applies a message about this conversation. */
+  apply(m: TabMessage): void {
+    switch (m.type) {
+      case "state":
+        if (m.state === "busy" && this.state !== "busy") this.busySince = Date.now();
+        this.state = m.state;
+        this.detail = m.detail ?? "";
+        break;
+      case "user": {
+        this.endAgentMessage();
+        const bubble = div("message user", m.text);
+        if (m.spoken) bubble.classList.add("spoken");
+        if (m.context) {
+          const chip = div("context-chip", `📍 ${m.context}`);
+          chip.title = "Your editor position was sent with this message";
+          bubble.appendChild(chip);
+        }
+        for (const name of m.attachments ?? []) {
+          const chip = div("context-chip", `📎 ${name}`);
+          chip.title = "Attached to this message";
+          bubble.appendChild(chip);
+        }
+        if (m.turn !== undefined) {
+          const rewind = document.createElement("button");
+          rewind.className = "rewind secondary";
+          rewind.textContent = "↶ Rewind";
+          rewind.title = "Go back to just before this message: later messages are removed and this one returns to the input box";
+          const turn = m.turn;
+          rewind.addEventListener("click", () => vscode.postMessage({ type: "rewind", tabId: this.id, turn }));
+          bubble.appendChild(rewind);
+        }
+        this.append(bubble);
+        break;
+      }
+      case "agentText":
+        if (!this.agentBubble) {
+          this.agentBubble = div("message agent");
+          this.append(this.agentBubble);
+        }
+        this.agentText += m.chunk;
+        if (!this.renderQueued) {
+          this.renderQueued = true;
+          requestAnimationFrame(() => this.renderAgent());
+        }
+        break;
+      case "turnEnd":
+        this.endAgentMessage();
+        if (m.stopReason !== "end_turn") this.append(div("notice", `Turn ended: ${m.stopReason}`));
+        break;
+      case "tool": {
+        if (m.hidden) break;
+        // A tool call splits the reply: text after it starts a new bubble.
+        if (!m.isUpdate) this.endAgentMessage();
+        const created = this.tools.update(m.id, { title: m.title, kind: m.kind, status: m.status, content: m.content });
+        if (created) this.append(created);
+        break;
+      }
+      case "permission": {
+        this.endAgentMessage();
+        const card = div("permission");
+        card.appendChild(div("permission-title", `Claude wants to run: ${m.title}${m.kind ? ` (${m.kind})` : ""}`));
+        if (m.content?.length) {
+          const detail = div("permission-detail");
+          renderToolContent(detail, m.content, md, openDiff);
+          card.appendChild(detail);
+        }
+        const row = div("permission-buttons");
+        for (const o of m.options) {
+          const b = document.createElement("button");
+          b.textContent = o.name;
+          b.className = o.kind.startsWith("allow") ? "allow" : "secondary";
+          b.addEventListener("click", () => vscode.postMessage({ type: "permission", tabId: this.id, requestId: m.requestId, optionId: o.optionId }));
+          row.appendChild(b);
+        }
+        card.appendChild(row);
+        this.permissionCards.set(m.requestId, card);
+        this.append(card);
+        this.scrollToEnd();
+        break;
+      }
+      case "permissionDone": {
+        const card = this.permissionCards.get(m.requestId);
+        if (card) {
+          card.classList.add("answered");
+          card.querySelectorAll("button").forEach((b) => (b.disabled = true));
+          this.permissionCards.delete(m.requestId);
+        }
+        break;
+      }
+      case "step": {
+        this.endAgentMessage();
+        const bubble = div("message agent step");
+        const lines = m.startLine === m.endLine ? `line ${m.startLine}` : `lines ${m.startLine}–${m.endLine}`;
+        bubble.appendChild(div("step-ref", `${m.file} · ${lines}`));
+        const body = div("step-body");
+        body.innerHTML = md.render(m.text);
+        bubble.appendChild(body);
+        this.append(bubble);
+        break;
+      }
+      case "figure": {
+        this.endAgentMessage();
+        const block = div("figure");
+        const canvas = div("figure-body");
+        block.appendChild(canvas);
+        if (m.caption) block.appendChild(div("figure-caption", m.caption));
+        if (m.live) block.classList.add("live");
+        this.append(block);
+        renderFigure(canvas, m.kind, m.content).then(
+          (update) => {
+            if (m.live && update) {
+              this.liveCharts.set(m.id, update);
+              const pending = this.earlyRows.get(m.id);
+              this.earlyRows.delete(m.id);
+              if (pending) void update(pending);
+            }
+            this.scrollToEnd();
+            vscode.postMessage({ type: "figureResult", tabId: this.id, id: m.id, ok: true });
+          },
+          (err: unknown) => {
+            const message = err instanceof Error ? err.message : String(err);
+            canvas.replaceChildren(div("notice error", `Figure could not be rendered (${m.kind}): ${message}`));
+            vscode.postMessage({ type: "figureResult", tabId: this.id, id: m.id, ok: false, error: message });
+          },
+        );
+        break;
+      }
+      case "figureData": {
+        const update = this.liveCharts.get(m.id);
+        if (update) void update(m.rows);
+        else this.earlyRows.set(m.id, m.rows);
+        break;
+      }
+      case "options":
+        this.options = m.options;
+        break;
+      case "usage":
+        this.usage = { used: m.used, size: m.size };
+        break;
+      case "title":
+        this.title = m.title;
+        break;
+      case "commands":
+        this.commands = m.commands;
+        break;
+      case "queued": {
+        const bubble = div("message user queued", m.text + (m.images ? `  (+${m.images} image${m.images > 1 ? "s" : ""})` : ""));
+        const bar = div("queued-bar");
+        bar.appendChild(div("queued-label", "queued — sends when Claude finishes"));
+        const now = document.createElement("button");
+        now.className = "secondary";
+        now.textContent = "Send now";
+        now.title = "Interrupt Claude and send this now";
+        now.addEventListener("click", () => vscode.postMessage({ type: "sendNow", tabId: this.id, id: m.id }));
+        const drop = document.createElement("button");
+        drop.className = "secondary";
+        drop.textContent = "✕";
+        drop.title = "Remove from the queue";
+        drop.addEventListener("click", () => vscode.postMessage({ type: "unqueue", tabId: this.id, id: m.id }));
+        bar.append(now, drop);
+        bubble.appendChild(bar);
+        this.queuedBubbles.set(m.id, bubble);
+        this.append(bubble);
+        this.scrollToEnd();
+        break;
+      }
+      case "dequeued":
+        this.queuedBubbles.get(m.id)?.remove();
+        this.queuedBubbles.delete(m.id);
+        break;
+      case "clear":
+        this.endAgentMessage();
+        this.log.replaceChildren();
+        this.tools.clear();
+        this.permissionCards.clear();
+        this.liveCharts.clear();
+        this.earlyRows.clear();
+        this.queuedBubbles.clear();
+        this.title = "";
+        this.usage = undefined;
+        break;
+      case "prefill":
+        if (this.id === activeId) {
+          input.value = m.text;
+          input.focus();
+          input.setSelectionRange(input.value.length, input.value.length);
+        }
+        break;
+      case "notice":
+        this.append(div("notice", m.text));
+        break;
+      case "error":
+        this.endAgentMessage();
+        this.append(div("notice error", m.text));
+        break;
+    }
+  }
+}
+
+const views = new Map<string, TabView>();
+let activeId = "";
+
+function view(id: string): TabView {
+  let v = views.get(id);
+  if (!v) {
+    v = new TabView(id);
+    views.set(id, v);
+  }
+  return v;
+}
+
+function activeView(): TabView | undefined {
+  return views.get(activeId);
+}
+
+// MARK: Tab strip and session bar
+
+function renderTabs(tabs: TabSummary[]): void {
+  tabList.replaceChildren();
+  for (const t of tabs) {
+    const tab = document.createElement("div");
+    tab.className = "tab" + (t.id === activeId ? " active" : "") + (t.busy ? " busy" : "");
+    tab.title = t.label;
+    const mark = t.needsApproval ? "⚠ " : t.unread ? "● " : t.busy ? "… " : "";
+    const label = div("tab-label", mark + t.label);
+    if (t.needsApproval) label.classList.add("attention");
+    else if (t.unread) label.classList.add("unread");
+    const close = document.createElement("button");
+    close.className = "tab-close";
+    close.textContent = "✕";
+    close.title = "Close this conversation";
+    close.addEventListener("click", (e) => {
+      e.stopPropagation();
+      vscode.postMessage({ type: "closeTab", id: t.id });
+    });
+    tab.append(label, close);
+    tab.addEventListener("click", () => {
+      if (t.id !== activeId) vscode.postMessage({ type: "switchTab", id: t.id });
+    });
+    tabList.appendChild(tab);
+  }
+  tabList.querySelector(".tab.active")?.scrollIntoView({ block: "nearest", inline: "nearest" });
+}
+
+let busyTimer: ReturnType<typeof setInterval> | undefined;
+
+/** Shows the active tab's status, settings, usage and title in the shared header. */
+function renderActiveHeader(): void {
+  const v = activeView();
+  if (busyTimer) clearInterval(busyTimer);
+  busyTimer = undefined;
+  if (!v) return;
+  status.className = `status ${v.state}`;
+  const showWorking = () => (status.textContent = `Claude is working… ${Math.floor((Date.now() - v.busySince) / 1000)} s`);
+  if (v.state === "busy") {
+    showWorking();
+    busyTimer = setInterval(showWorking, 1000);
+  } else {
+    status.textContent = v.state === "ready" ? `Ready — ${v.detail}` : v.detail || v.state;
+  }
+  titleEl.textContent = v.title;
+  titleEl.hidden = !v.title;
+  renderOptions(v);
+  if (v.usage) {
+    const { used, size } = v.usage;
+    const k = (n: number) => (n >= 1_000_000 ? `${(n / 1_000_000).toFixed(n % 1_000_000 ? 1 : 0)}M` : `${Math.round(n / 1000)}k`);
+    const ratio = size ? used / size : 0;
+    usageEl.textContent = `context ${k(used)} / ${k(size)}`;
+    usageEl.title = `${used.toLocaleString()} of ${size.toLocaleString()} tokens (${Math.round(ratio * 100)}%)`;
+    usageEl.classList.toggle("high", ratio > 0.8);
+  } else {
+    usageEl.textContent = "";
+  }
+  updateControls();
+}
+
+function renderOptions(v: TabView): void {
+  optionsEl.replaceChildren();
+  for (const o of v.options) {
+    if (o.id === "fast") {
+      const label = document.createElement("label");
+      label.className = "option-toggle";
+      const box = document.createElement("input");
+      box.type = "checkbox";
+      box.checked = o.current === "on";
+      box.addEventListener("change", () => vscode.postMessage({ type: "setOption", tabId: v.id, id: o.id, value: box.checked ? "on" : "off" }));
+      label.append(box, document.createTextNode(` ${o.name}`));
+      optionsEl.appendChild(label);
+      continue;
+    }
+    const select = document.createElement("select");
+    select.className = "option-select";
+    select.title = o.name;
+    for (const c of o.choices) {
+      const opt = new Option(`${o.name}: ${c.name}`, c.value, false, c.value === o.current);
+      if (c.description) opt.title = c.description;
+      select.add(opt);
+    }
+    select.addEventListener("change", () => vscode.postMessage({ type: "setOption", tabId: v.id, id: o.id, value: select.value }));
+    optionsEl.appendChild(select);
+  }
+}
+
+function showTab(id: string): void {
+  if (id === activeId && views.get(id) && !views.get(id)!.log.hidden) return;
+  activeId = id;
+  for (const v of views.values()) v.log.hidden = v.id !== id;
+  view(id).log.hidden = false;
+  sessionMenu.hidden = true;
+  renderActiveHeader();
+  activeView()?.scrollToEnd();
+}
+
+// MARK: Message box: completion, images, history
+
 const completer = new Completer(input);
-let commands: { name: string; description: string; hint?: string }[] = [];
 completer.addSource((text, caret) => {
   const m = /^\/(\S*)$/.exec(text.slice(0, caret));
   if (!m) return undefined;
   const typed = m[1].toLowerCase();
-  const items = commands
+  const items = (activeView()?.commands ?? [])
     .filter((c) => c.name.toLowerCase().includes(typed))
     .sort((a, b) => Number(!a.name.toLowerCase().startsWith(typed)) - Number(!b.name.toLowerCase().startsWith(typed)))
     .map((c) => ({ label: `/${c.name}`, detail: c.hint ? `${c.hint} — ${c.description}` : c.description, insert: `/${c.name} ` }));
   return { start: 0, items };
 });
-let files: string[] = [];
-let filesRequestedAt = 0;
+
+/** @-completion: the extension searches the workspace for what was typed; results are cached per query. */
+const fileResults = new Map<string, string[]>();
+let lastFileQuery = "";
 completer.addSource((text, caret) => {
   const m = /(?:^|\s)@([^\s@]*)$/.exec(text.slice(0, caret));
   if (!m) return undefined;
-  if (Date.now() - filesRequestedAt > 30_000) {
-    filesRequestedAt = Date.now();
-    vscode.postMessage({ type: "listFiles" });
+  const typed = m[1];
+  if (typed !== lastFileQuery && !fileResults.has(typed)) {
+    lastFileQuery = typed;
+    vscode.postMessage({ type: "listFiles", query: typed });
   }
-  const typed = m[1].toLowerCase();
+  const lower = typed.toLowerCase();
+  const files = fileResults.get(typed) ?? fileResults.get(typed.slice(0, -1)) ?? [];
   const scored = files
     .map((f) => {
-      const lower = f.toLowerCase();
-      const base = lower.slice(lower.lastIndexOf("/") + 1);
-      const score = base.startsWith(typed) ? 0 : base.includes(typed) ? 1 : lower.includes(typed) ? 2 : -1;
+      const path = f.toLowerCase();
+      const base = path.slice(path.lastIndexOf("/") + 1);
+      const score = base.startsWith(lower) ? 0 : base.includes(lower) ? 1 : path.includes(lower) ? 2 : -1;
       return { f, score };
     })
     .filter((x) => x.score >= 0)
     .sort((a, b) => a.score - b.score || a.f.length - b.f.length);
   const items = scored.slice(0, 50).map(({ f }) => ({ label: f.slice(f.lastIndexOf("/") + 1), detail: f, insert: `@${f} ` }));
-  return { start: caret - m[1].length - 1, items };
+  return { start: caret - typed.length - 1, items };
 });
+
 const MAX_IMAGES = 5;
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const pendingImages: { mimeType: string; data: string; url: string }[] = [];
@@ -135,8 +508,8 @@ function renderImageTray(): void {
 
 function addImage(file: File): void {
   if (!file.type.startsWith("image/")) return;
-  if (pendingImages.length >= MAX_IMAGES) return void append(div("notice", `At most ${MAX_IMAGES} images per message.`));
-  if (file.size > MAX_IMAGE_BYTES) return void append(div("notice", "Images over 5 MB are not attached."));
+  if (pendingImages.length >= MAX_IMAGES) return void activeView()?.append(div("notice", `At most ${MAX_IMAGES} images per message.`));
+  if (file.size > MAX_IMAGE_BYTES) return void activeView()?.append(div("notice", "Images over 5 MB are not attached."));
   const reader = new FileReader();
   reader.onload = () => {
     const url = String(reader.result);
@@ -159,6 +532,7 @@ input.addEventListener("drop", (e) => {
   e.preventDefault();
   images.forEach(addImage);
 });
+
 /** Sent messages, oldest first; ↑/↓ walk it like a shell history. */
 const history: string[] = vscode.getState()?.history ?? [];
 let historyIndex = history.length;
@@ -188,65 +562,27 @@ function walkHistory(e: KeyboardEvent): boolean {
   input.setSelectionRange(at, at);
   return true;
 }
+
+// MARK: Voice state
+
+const VOICE_LABELS: Record<string, string> = {
+  loading: "Voice loading…",
+  idle: "Voice ready",
+  warming: "Starting mic…",
+  listening: "● Listening — press Send (or Ctrl+Shift+Space) when done",
+  speaking: "Speaking",
+  interrupted: "Paused — you're speaking",
+  unavailable: "Voice unavailable",
+};
 let voiceUsable = false;
-let voiceText = "";
+let listening = false;
 const meter = document.createElement("span");
 meter.className = "meter";
-let listening = false;
-let autoListening = false;
-
-let ready = false;
-let busy = false;
-let busySince = 0;
-let busyTimer: ReturnType<typeof setInterval> | undefined;
-
-function showWorking(): void {
-  const seconds = Math.floor((Date.now() - busySince) / 1000);
-  status.textContent = `Claude is working… ${seconds} s`;
-}
-let agentText = "";
-let agentBubble: HTMLElement | null = null;
-let renderQueued = false;
-const openDiff = (path: string, oldText: string | null, newText: string) =>
-  vscode.postMessage({ type: "openDiff", path, oldText, newText });
-const tools = new ToolCards(md, openDiff);
-const permissionCards = new Map<string, HTMLElement>();
-const liveCharts = new Map<string, LiveUpdater>();
-const queuedBubbles = new Map<string, HTMLElement>();
-/** Rows that arrived before their chart finished rendering. */
-const earlyRows = new Map<string, Record<string, unknown>[]>();
-
-function scrollToEnd(): void {
-  log.scrollTop = log.scrollHeight;
-}
-
-function append(el: HTMLElement): void {
-  const nearBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 80;
-  log.appendChild(el);
-  if (nearBottom) scrollToEnd();
-}
-
-function div(className: string, text?: string): HTMLElement {
-  const el = document.createElement("div");
-  el.className = className;
-  if (text !== undefined) el.textContent = text;
-  return el;
-}
-
-function renderAgent(): void {
-  renderQueued = false;
-  if (!agentBubble) return;
-  agentBubble.innerHTML = md.render(agentText);
-  scrollToEnd();
-}
-
-function endAgentMessage(): void {
-  if (agentBubble) renderAgent();
-  agentBubble = null;
-  agentText = "";
-}
 
 function updateControls(): void {
+  const v = activeView();
+  const ready = !!v && (v.state === "ready" || v.state === "busy");
+  const busy = v?.state === "busy";
   sendButton.disabled = !ready;
   sendButton.textContent = busy ? "Queue" : "Send";
   sendButton.title = busy ? "Claude is working; this message waits for the current turn to finish" : "Send (Enter)";
@@ -261,66 +597,45 @@ function updateControls(): void {
 }
 
 function send(): void {
+  const v = activeView();
   const text = input.value.trim();
-  if ((!text && !pendingImages.length) || !ready) return;
+  if (!v || (!text && !pendingImages.length) || !(v.state === "ready" || v.state === "busy")) return;
   remember(text);
   input.value = "";
   const images = pendingImages.splice(0).map(({ mimeType, data }) => ({ mimeType, data }));
   renderImageTray();
-  vscode.postMessage({ type: "send", text: text || "(see attached image)", images });
+  vscode.postMessage({ type: "send", tabId: v.id, text: text || "(see attached image)", images });
 }
 
-window.addEventListener("message", (event: MessageEvent<ToWebview>) => {
-  const m = event.data;
+// MARK: Messages from the extension
+
+function applyPanel(m: PanelMessage): void {
   switch (m.type) {
-    case "state":
-      ready = m.state === "ready" || m.state === "busy";
-      if (m.state === "busy" && !busy) {
-        busySince = Date.now();
-        busyTimer = setInterval(showWorking, 1000);
-      } else if (m.state !== "busy" && busyTimer) {
-        clearInterval(busyTimer);
-        busyTimer = undefined;
+    case "tabs":
+      for (const t of m.tabs) view(t.id);
+      for (const id of [...views.keys()]) {
+        if (!m.tabs.some((t) => t.id === id)) {
+          views.get(id)!.log.remove();
+          views.delete(id);
+        }
       }
-      busy = m.state === "busy";
-      status.className = `status ${m.state}`;
-      if (busy) showWorking();
-      else status.textContent = m.state === "ready" ? `Ready — ${m.detail ?? ""}` : (m.detail ?? m.state);
-      updateControls();
-      if (m.state === "ready") input.focus();
+      showTab(m.activeId);
+      renderTabs(m.tabs);
       break;
-    case "user": {
-      endAgentMessage();
-      const bubble = div("message user", m.text);
-      if (m.spoken) bubble.classList.add("spoken");
-      if (m.context) {
-        const chip = div("context-chip", `📍 ${m.context}`);
-        chip.title = "Your editor position was sent with this message";
-        bubble.appendChild(chip);
-      }
-      for (const name of m.attachments ?? []) {
-        const chip = div("context-chip", `📎 ${name}`);
-        chip.title = "Attached to this message";
-        bubble.appendChild(chip);
-      }
-      append(bubble);
-      break;
-    }
-    case "voice":
+    case "voice": {
       voiceUsable = m.microphone && m.state !== "loading" && m.state !== "unavailable";
       listening = m.state === "listening";
-      autoListening = m.autoListening;
       document.getElementById("conversation")!.textContent = m.conversation ? "💬 Conversation on" : "💬 Conversation off";
       voiceChip.className = `voice ${m.state}`;
-      voiceText =
-        (m.state === "listening" && autoListening ? "● Listening for your reply — pause to send" : (VOICE_LABELS[m.state] ?? m.state)) +
+      voiceChip.textContent =
+        (m.state === "listening" && m.autoListening ? "● Listening for your reply — pause to send" : (VOICE_LABELS[m.state] ?? m.state)) +
         (m.detail ? ` — ${m.detail}` : "");
-      voiceChip.textContent = voiceText;
       meter.textContent = "";
       if (m.state === "listening" || m.state === "interrupted") voiceChip.appendChild(meter);
       speakButton.textContent = m.speak ? "🔊 Voice on" : "🔇 Voice off";
       updateControls();
       break;
+    }
     case "level": {
       // -60 dBFS (silence) .. 0 dBFS (loud) mapped to 0..10 bars.
       const bars = Math.max(0, Math.min(10, Math.round((m.db + 60) / 6)));
@@ -332,218 +647,44 @@ window.addEventListener("message", (event: MessageEvent<ToWebview>) => {
       partial.textContent = m.text;
       partial.className = `partial ${m.source ?? ""}`;
       break;
-    case "notice":
-      append(div("notice", m.text));
-      break;
-    case "options": {
-      const holder = document.getElementById("options")!;
-      holder.replaceChildren();
-      for (const o of m.options) {
-        if (o.id === "fast") {
-          const label = document.createElement("label");
-          label.className = "option-toggle";
-          const box = document.createElement("input");
-          box.type = "checkbox";
-          box.checked = o.current === "on";
-          box.addEventListener("change", () => vscode.postMessage({ type: "setOption", id: o.id, value: box.checked ? "on" : "off" }));
-          label.append(box, document.createTextNode(` ${o.name}`));
-          holder.appendChild(label);
-          continue;
-        }
-        const select = document.createElement("select");
-        select.className = "option-select";
-        select.title = o.name;
-        for (const c of o.choices) {
-          const opt = new Option(`${o.name}: ${c.name}`, c.value, false, c.value === o.current);
-          if (c.description) opt.title = c.description;
-          select.add(opt);
-        }
-        select.addEventListener("change", () => vscode.postMessage({ type: "setOption", id: o.id, value: select.value }));
-        holder.appendChild(select);
-      }
-      break;
-    }
-    case "usage": {
-      const usage = document.getElementById("usage")!;
-      const k = (n: number) => (n >= 1_000_000 ? `${(n / 1_000_000).toFixed(n % 1_000_000 ? 1 : 0)}M` : `${Math.round(n / 1000)}k`);
-      const ratio = m.size ? m.used / m.size : 0;
-      usage.textContent = `context ${k(m.used)} / ${k(m.size)}`;
-      usage.title = `${m.used.toLocaleString()} of ${m.size.toLocaleString()} tokens (${Math.round(ratio * 100)}%)`;
-      usage.classList.toggle("high", ratio > 0.8);
-      break;
-    }
-    case "queued": {
-      const bubble = div("message user queued", m.text + (m.images ? `  (+${m.images} image${m.images > 1 ? "s" : ""})` : ""));
-      const bar = div("queued-bar");
-      bar.appendChild(div("queued-label", "queued — sends when Claude finishes"));
-      const now = document.createElement("button");
-      now.className = "secondary";
-      now.textContent = "Send now";
-      now.title = "Interrupt Claude and send this now";
-      now.addEventListener("click", () => vscode.postMessage({ type: "sendNow", id: m.id }));
-      const drop = document.createElement("button");
-      drop.className = "secondary";
-      drop.textContent = "✕";
-      drop.title = "Remove from the queue";
-      drop.addEventListener("click", () => vscode.postMessage({ type: "unqueue", id: m.id }));
-      bar.append(now, drop);
-      bubble.appendChild(bar);
-      queuedBubbles.set(m.id, bubble);
-      append(bubble);
-      scrollToEnd();
-      break;
-    }
-    case "dequeued":
-      queuedBubbles.get(m.id)?.remove();
-      queuedBubbles.delete(m.id);
-      break;
-    case "commands":
-      commands = m.commands;
-      break;
     case "files":
-      files = m.files;
+      fileResults.set(m.query, m.files);
       completer.refresh();
-      break;
-    case "title": {
-      const title = document.getElementById("title")!;
-      title.textContent = m.title;
-      title.hidden = false;
-      break;
-    }
-    case "clear":
-      endAgentMessage();
-      log.replaceChildren();
-      tools.clear();
-      permissionCards.clear();
-      liveCharts.clear();
-      earlyRows.clear();
-      sessionMenu.hidden = true;
-      document.getElementById("title")!.hidden = true;
-      document.getElementById("usage")!.textContent = "";
       break;
     case "sessions": {
       sessionList.replaceChildren();
       if (!m.items.length) sessionList.appendChild(div("notice", "No conversations yet."));
       for (const item of m.items) {
         const row = document.createElement("button");
-        row.className = "session-item" + (item.id === m.currentId ? " current" : "");
+        row.className = "session-item" + (item.openInTab ? " current" : "");
         row.appendChild(div("session-title", item.title));
-        row.appendChild(div("session-time", item.id === m.currentId ? "current" : relativeTime(item.updatedAt)));
-        row.disabled = item.id === m.currentId;
+        row.appendChild(div("session-time", item.openInTab ? "open in a tab" : relativeTime(item.updatedAt)));
         row.addEventListener("click", () => {
           sessionMenu.hidden = true;
-          vscode.postMessage({ type: "loadSession", id: item.id });
+          vscode.postMessage({ type: "openSession", id: item.id });
         });
         sessionList.appendChild(row);
       }
       sessionMenu.hidden = false;
       break;
     }
-    case "step": {
-      endAgentMessage();
-      const bubble = div("message agent step");
-      const lines = m.startLine === m.endLine ? `line ${m.startLine}` : `lines ${m.startLine}–${m.endLine}`;
-      bubble.appendChild(div("step-ref", `${m.file} · ${lines}`));
-      const body = div("step-body");
-      body.innerHTML = md.render(m.text);
-      bubble.appendChild(body);
-      append(bubble);
-      break;
-    }
-    case "figureData": {
-      const update = liveCharts.get(m.id);
-      if (update) void update(m.rows);
-      else earlyRows.set(m.id, m.rows);
-      break;
-    }
-    case "figure": {
-      endAgentMessage();
-      const block = div("figure");
-      const canvas = div("figure-body");
-      block.appendChild(canvas);
-      if (m.caption) block.appendChild(div("figure-caption", m.caption));
-      append(block);
-      if (m.live) block.classList.add("live");
-      renderFigure(canvas, m.kind, m.content).then(
-        (update) => {
-          if (m.live && update) {
-            liveCharts.set(m.id, update);
-            const pending = earlyRows.get(m.id);
-            earlyRows.delete(m.id);
-            if (pending) void update(pending);
-          }
-          scrollToEnd();
-          vscode.postMessage({ type: "figureResult", id: m.id, ok: true });
-        },
-        (err: unknown) => {
-          const message = err instanceof Error ? err.message : String(err);
-          canvas.replaceChildren(div("notice error", `Figure could not be rendered (${m.kind}): ${message}`));
-          vscode.postMessage({ type: "figureResult", id: m.id, ok: false, error: message });
-        },
-      );
-      break;
-    }
-    case "agentText":
-      if (!agentBubble) {
-        agentBubble = div("message agent");
-        append(agentBubble);
-      }
-      agentText += m.chunk;
-      if (!renderQueued) {
-        renderQueued = true;
-        requestAnimationFrame(renderAgent);
-      }
-      break;
-    case "tool": {
-      if (m.hidden) break;
-      // A tool call splits the reply: text after it starts a new bubble.
-      if (!m.isUpdate) endAgentMessage();
-      const created = tools.update(m.id, { title: m.title, kind: m.kind, status: m.status, content: m.content });
-      if (created) append(created);
-      break;
-    }
-    case "permission": {
-      endAgentMessage();
-      const card = div("permission");
-      card.appendChild(div("permission-title", `Claude wants to run: ${m.title}${m.kind ? ` (${m.kind})` : ""}`));
-      if (m.content?.length) {
-        const detail = div("permission-detail");
-        renderToolContent(detail, m.content, md, openDiff);
-        card.appendChild(detail);
-      }
-      const row = div("permission-buttons");
-      for (const o of m.options) {
-        const b = document.createElement("button");
-        b.textContent = o.name;
-        b.className = o.kind.startsWith("allow") ? "allow" : "secondary";
-        b.addEventListener("click", () => vscode.postMessage({ type: "permission", requestId: m.requestId, optionId: o.optionId }));
-        row.appendChild(b);
-      }
-      card.appendChild(row);
-      permissionCards.set(m.requestId, card);
-      append(card);
-      scrollToEnd();
-      break;
-    }
-    case "permissionDone": {
-      const card = permissionCards.get(m.requestId);
-      if (card) {
-        card.classList.add("answered");
-        card.querySelectorAll("button").forEach((b) => (b.disabled = true));
-        permissionCards.delete(m.requestId);
-      }
-      break;
-    }
-    case "turnEnd":
-      endAgentMessage();
-      if (m.stopReason !== "end_turn") append(div("notice", `Turn ended: ${m.stopReason}`));
-      break;
-    case "error":
-      endAgentMessage();
-      append(div("notice error", m.text));
+    case "notice":
+      activeView()?.append(div("notice", m.text));
       break;
   }
+}
+
+window.addEventListener("message", (event: MessageEvent<ToWebview>) => {
+  const m = event.data;
+  if ("tabId" in m) {
+    view(m.tabId).apply(m);
+    if (m.tabId === activeId && ["state", "options", "usage", "title", "clear"].includes(m.type)) renderActiveHeader();
+  } else {
+    applyPanel(m);
+  }
 });
+
+// MARK: Controls
 
 input.addEventListener("keydown", (e) => {
   if (completer.handleKey(e) || walkHistory(e)) {
@@ -556,8 +697,11 @@ input.addEventListener("keydown", (e) => {
   }
 });
 sendButton.addEventListener("click", send);
-stopButton.addEventListener("click", () => vscode.postMessage({ type: "stop" }));
+stopButton.addEventListener("click", () => {
+  if (activeId) vscode.postMessage({ type: "stop", tabId: activeId });
+});
 talkButton.addEventListener("click", () => vscode.postMessage({ type: "talk" }));
+document.getElementById("new-tab")!.addEventListener("click", () => vscode.postMessage({ type: "newTab" }));
 document.getElementById("sessions")!.addEventListener("click", () => {
   if (!sessionMenu.hidden) {
     sessionMenu.hidden = true;
@@ -568,14 +712,12 @@ document.getElementById("sessions")!.addEventListener("click", () => {
 document.getElementById("session-close")!.addEventListener("click", () => (sessionMenu.hidden = true));
 document.getElementById("session-new")!.addEventListener("click", () => {
   sessionMenu.hidden = true;
-  vscode.postMessage({ type: "newSession" });
+  vscode.postMessage({ type: "newTab" });
 });
 speakButton.addEventListener("click", () => vscode.postMessage({ type: "toggleSpeak" }));
 document.getElementById("conversation")!.addEventListener("click", () => vscode.postMessage({ type: "toggleConversation" }));
 restartButton.addEventListener("click", () => {
-  endAgentMessage();
-  append(div("notice", "Restarting session…"));
-  vscode.postMessage({ type: "restart" });
+  if (activeId) vscode.postMessage({ type: "restart", tabId: activeId });
 });
 
 updateControls();

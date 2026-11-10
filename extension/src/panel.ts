@@ -1,33 +1,14 @@
 import { randomBytes } from "node:crypto";
-import { closeSync, existsSync, mkdirSync, openSync, readFileSync, readSync, realpathSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, realpathSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import * as vscode from "vscode";
-import {
-  AgentSession,
-  BillingGuardError,
-  SPEECH_LAYER,
-  AutoTurnEnder,
-  RestartPolicy,
-  SpeechChunker,
-  StepSequencer,
-  VoiceClient,
-  classifyInterruption,
-  editorContextLabel,
-  formatEditorContext,
-  parseDataFile,
-  type Attachment,
-  type ConfigOption,
-  type ExplainStep,
-  type Figure,
-  type LiveChart,
-  type PermissionRequest,
-  type VoiceEvent,
-} from "@voice-harness/core";
+import { AutoTurnEnder, RestartPolicy, VoiceClient, classifyInterruption, type VoiceEvent } from "@voice-harness/core";
+import { ChatTab, withoutEditorContext, type TabServices } from "./chatTab";
 import { DiffView } from "./diffView";
 import { EditorControl } from "./editorControl";
 import { EditorTracker } from "./editorTracker";
-import type { FromWebview, ToWebview, VoiceUiState } from "./protocol";
+import type { FromWebview, PanelMessage, TabRequest, ToWebview, VoiceUiState } from "./protocol";
 import { resolveTool } from "./toolchain";
 
 /** Where the chat lives: an editor tab or a sidebar view. */
@@ -60,29 +41,31 @@ function viewHost(view: vscode.WebviewView): HarnessHost {
   };
 }
 
+const TAB_REQUESTS = new Set(["send", "stop", "restart", "permission", "figureResult", "setOption", "unqueue", "sendNow", "rewind"]);
+
 /**
- * The chat panel: owns one agent session, the voice process, and the editor
- * effects the agent causes.
+ * The chat panel: a set of conversation tabs (each its own agent session) sharing one voice
+ * process and one editor. Only the visible tab speaks, listens, or moves the editor.
  *
- * Speech: agent prose is chunked into sentences and spoken as it streams; a
- * user turn (typed or spoken) stops speech and, if the agent is mid-turn,
- * cancels that turn first. Speech from a cancelled turn is suppressed.
+ * Speech: the visible tab's prose is chunked into sentences and spoken as it streams; a user
+ * turn (typed or spoken) stops speech. Switching tabs turns conversation mode off and discards
+ * an unsent recording.
  */
-export class HarnessPanel implements vscode.Disposable {
+export class HarnessPanel implements vscode.Disposable, TabServices {
   private static current: HarnessPanel | undefined;
 
-  private session: AgentSession | undefined;
+  private readonly tabs = new Map<string, ChatTab>();
+  private activeId = "";
   private voice: VoiceClient | undefined;
   private voiceState: VoiceUiState = "loading";
   private voiceDetail: string | undefined;
   private microphone = false;
   private inputDevice: string | undefined;
   private speakReplies: boolean;
-  private readonly chunker = new SpeechChunker();
   private readonly voiceRestarts = new RestartPolicy();
   /** Conversation mode: after Claude finishes, listen for a reply that ends on a pause. */
   private conversation: boolean;
-  /** A finished agent turn whose spoken reply hasn't been answered yet. */
+  /** The visible tab finished a turn whose spoken reply hasn't been answered yet. */
   private awaitingReply = false;
   /** Speech queued and not yet finished; auto-listening waits for it so the reply isn't cut off. */
   private speechPending = false;
@@ -90,29 +73,17 @@ export class HarnessPanel implements vscode.Disposable {
     () => this.voice?.listenStop(),
     () => this.voice?.listenCancel(),
   );
-  private readonly steps = new StepSequencer<ExplainStep>((step) => this.presentStep(step));
-  /** True while a loaded session's history is replayed: shown, not spoken, no editor effects. */
-  private replaying = false;
-  /** User text of the replayed message currently being assembled. */
-  private replayUser = "";
-  /** True from a cancel (or the start of listening) until the next turn starts. */
-  private suppressSpeech = false;
-  private turn: Promise<void> | null = null;
-  private fileList: { files: string[]; at: number } | undefined;
-  /** Typed messages waiting for the running turn to finish, oldest first. */
-  private readonly queue: { id: string; text: string; images: { mimeType: string; data: string }[] }[] = [];
-  private readonly pendingPermissions = new Map<string, (optionId: string | null) => void>();
-  private readonly pendingFigures = new Map<string, (result: { ok: boolean; error?: string }) => void>();
-  /** Live charts following their data files, oldest first. */
-  private readonly liveCharts = new Map<string, ReturnType<typeof setInterval>>();
   /** Editor effects waiting for speech to reach their place, keyed by voice marker id. */
   private readonly pendingMarks = new Map<number, () => void>();
-  private readonly editor: EditorControl;
-  private readonly tracker: EditorTracker;
+  readonly editor: EditorControl;
+  readonly tracker: EditorTracker;
   private readonly diffs = new DiffView();
   private disposed = false;
 
   static readonly VIEW_ID = "voiceHarness.view";
+  static readonly DEFAULT_MODELS = path.join(os.homedir(), "Library", "Application Support", "voice-harness", "models");
+
+  // MARK: Opening
 
   /** Opens the chat where the `voiceHarness.location` setting says (sidebar by default). */
   static show(context: vscode.ExtensionContext, output: vscode.OutputChannel): void {
@@ -124,8 +95,11 @@ export class HarnessPanel implements vscode.Disposable {
       void vscode.commands.executeCommand(`${HarnessPanel.VIEW_ID}.focus`);
       return;
     }
-    const folder = HarnessPanel.workspaceFolder();
-    if (!folder) return;
+    const folder = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    if (!folder) {
+      void vscode.window.showErrorMessage("Voice Harness needs an open folder: the agent works inside it.");
+      return;
+    }
     const panel = vscode.window.createWebviewPanel("voiceHarness", "Voice Harness", vscode.ViewColumn.Two, {
       enableScripts: true,
       retainContextWhenHidden: true,
@@ -147,14 +121,10 @@ export class HarnessPanel implements vscode.Disposable {
     HarnessPanel.current = new HarnessPanel(viewHost(view), context, folder, output);
   }
 
-  private static workspaceFolder(): string | undefined {
-    const folder = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-    if (!folder) void vscode.window.showErrorMessage("Voice Harness needs an open folder: the agent works inside it.");
-    return folder;
-  }
-
   static restart(): void {
-    void HarnessPanel.current?.startSession();
+    const panel = HarnessPanel.current;
+    const tab = panel?.active;
+    if (tab) void tab.handle({ type: "restart", tabId: tab.id });
   }
 
   static toggleListening(): void {
@@ -180,8 +150,8 @@ export class HarnessPanel implements vscode.Disposable {
   private constructor(
     private readonly host: HarnessHost,
     private readonly context: vscode.ExtensionContext,
-    private readonly workspace: string,
-    private readonly output: vscode.OutputChannel,
+    readonly workspace: string,
+    readonly output: vscode.OutputChannel,
   ) {
     this.editor = new EditorControl(workspace);
     this.tracker = new EditorTracker(workspace);
@@ -192,36 +162,157 @@ export class HarnessPanel implements vscode.Disposable {
     host.onDidDispose(() => this.dispose());
   }
 
-  private post(message: ToWebview): void {
+  private get active(): ChatTab | undefined {
+    return this.tabs.get(this.activeId);
+  }
+
+  // MARK: TabServices
+
+  post(message: ToWebview): void {
     if (!this.disposed) void this.host.webview.postMessage(message);
   }
 
+  private postPanel(message: PanelMessage): void {
+    this.post(message);
+  }
+
+  isActive(tab: ChatTab): boolean {
+    return tab.id === this.activeId;
+  }
+
+  agentPaths() {
+    const config = vscode.workspace.getConfiguration("voiceHarness");
+    const nodePath = resolveTool("node", config.get<string>("nodePath"));
+    const claudePath = resolveTool("claude", config.get<string>("claudePath"));
+    const agentEntry = this.runtimeFile(path.join("node_modules", "@agentclientprotocol", "claude-agent-acp", "dist", "index.js"));
+    const mcpServerScript = path.join(this.context.extensionPath, "dist", "mcpServer.mjs");
+    const missing = [
+      !nodePath && "node (set voiceHarness.nodePath)",
+      !claudePath && "claude CLI (set voiceHarness.claudePath)",
+      !existsSync(agentEntry) && `claude-agent-acp at ${agentEntry} (run npm install)`,
+      !existsSync(mcpServerScript) && `${mcpServerScript} (run npm run build)`,
+    ].filter((x): x is string => !!x);
+    return missing.length ? { missing } : { nodePath: nodePath!, claudePath: claudePath!, agentEntry, mcpServerScript };
+  }
+
+  speak(tab: ChatTab, sentences: string[]): void {
+    if (!this.isActive(tab) || !this.voice || !this.speakReplies || !sentences.length) return;
+    for (const s of sentences) this.voice.speak(s);
+    this.speechPending = true;
+  }
+
+  /**
+   * Applies an editor effect when speech reaches the point where the agent asked for it, so
+   * highlights move with the spoken explanation rather than with (faster) generation. Without
+   * speech the effect applies at once; background tabs never move the editor.
+   */
+  inStepWithSpeech(tab: ChatTab, effect: () => void): void {
+    if (!this.isActive(tab)) return;
+    if (!this.voice || !this.speakReplies || this.voiceState === "loading" || this.voiceState === "unavailable") {
+      effect();
+      return;
+    }
+    this.pendingMarks.set(this.voice.mark(), effect);
+  }
+
+  silence(tab: ChatTab): void {
+    if (!this.isActive(tab)) return;
+    this.awaitingReply = false;
+    this.speechPending = false;
+    this.pendingMarks.clear();
+    this.voice?.stopSpeaking();
+  }
+
+  turnFinished(tab: ChatTab): void {
+    if (!this.isActive(tab)) return;
+    this.awaitingReply = true;
+    // With no speech in flight, listen now; otherwise speechIdle starts it.
+    if (!this.speechPending) setTimeout(() => this.maybeListenForReply(), 0);
+  }
+
+  changed(tab: ChatTab): void {
+    this.postTabs();
+    if (this.isActive(tab)) this.updateHostTitle();
+  }
+
+  // MARK: Tabs
+
+  private newTab(loadSessionId?: string): ChatTab {
+    const tab = new ChatTab(this);
+    this.tabs.set(tab.id, tab);
+    this.activate(tab.id);
+    void tab.start(loadSessionId);
+    return tab;
+  }
+
+  /** Shows a tab. Conversation mode turns off and an unsent recording is discarded. */
+  private activate(id: string): void {
+    const previous = this.active;
+    if (previous && previous.id !== id) {
+      this.voice?.stopSpeaking();
+      this.pendingMarks.clear();
+      this.speechPending = false;
+      this.awaitingReply = false;
+      if (this.autoTurn.running || this.voiceState === "listening" || this.voiceState === "warming") this.cancelListening();
+      if (this.conversation) {
+        this.conversation = false;
+        this.postVoice();
+      }
+    }
+    this.activeId = id;
+    const tab = this.active;
+    if (tab) tab.unread = false;
+    this.postTabs();
+    this.updateHostTitle();
+  }
+
+  private closeTab(id: string): void {
+    const tab = this.tabs.get(id);
+    if (!tab) return;
+    const order = [...this.tabs.keys()];
+    const index = order.indexOf(id);
+    if (this.activeId === id) this.cancelListening();
+    tab.dispose();
+    this.tabs.delete(id);
+    if (!this.tabs.size) {
+      this.newTab();
+      return;
+    }
+    if (this.activeId === id) this.activate(order[index + 1] ?? order[index - 1]);
+    else this.postTabs();
+  }
+
+  private postTabs(): void {
+    if (!this.activeId) return;
+    this.postPanel({ type: "tabs", tabs: [...this.tabs.values()].map((t) => t.summary()), activeId: this.activeId });
+  }
+
+  private updateHostTitle(): void {
+    const title = this.active?.displayTitle;
+    this.host.setTitle(title ? `Voice Harness: ${title}` : "Voice Harness");
+  }
+
+  // MARK: Messages from the webview
+
   private async onMessage(m: FromWebview): Promise<void> {
+    if (TAB_REQUESTS.has(m.type)) {
+      const request = m as TabRequest;
+      const tab = this.tabs.get(request.tabId);
+      if (!tab) return;
+      if (request.type === "send" || request.type === "sendNow") {
+        if (this.autoTurn.running && this.isActive(tab)) this.cancelListening();
+      }
+      if (request.type === "stop" && this.isActive(tab) && (this.voiceState === "listening" || this.voiceState === "warming")) {
+        this.cancelListening();
+      }
+      await tab.handle(request);
+      return;
+    }
     switch (m.type) {
       case "ready":
         this.startVoice();
-        await this.startSession();
-        break;
-      case "send":
-        if (this.turn) this.enqueue(m.text, m.images ?? []);
-        else await this.send(m.text, false, m.images ?? []);
-        break;
-      case "listFiles":
-        this.post({ type: "files", files: await this.workspaceFiles() });
-        break;
-      case "unqueue":
-        this.removeQueued(m.id);
-        break;
-      case "sendNow": {
-        const item = this.removeQueued(m.id);
-        if (item) await this.send(item.text, false, item.images);
-        break;
-      }
-      case "stop":
-        this.stopEverything();
-        break;
-      case "restart":
-        await this.startSession();
+        if (!this.tabs.size) this.newTab();
+        else this.postTabs();
         break;
       case "talk":
         this.talk();
@@ -236,22 +327,15 @@ export class HarnessPanel implements vscode.Disposable {
         break;
       case "toggleSpeak":
         this.speakReplies = !this.speakReplies;
-        if (!this.speakReplies) this.silence();
+        if (!this.speakReplies) {
+          this.voice?.stopSpeaking();
+          this.pendingMarks.clear();
+          this.speechPending = false;
+        }
         this.postVoice();
         break;
-      case "permission":
-        this.pendingPermissions.get(m.requestId)?.(m.optionId);
-        break;
-      case "figureResult":
-        this.pendingFigures.get(m.id)?.({ ok: m.ok, error: m.error });
-        break;
-      case "setOption":
-        try {
-          await this.session?.setConfigOption(m.id, m.value);
-        } catch (err) {
-          this.post({ type: "notice", text: `Could not change ${m.id}: ${(err as Error).message}` });
-          if (this.session) this.postOptions(this.session.configOptions);
-        }
+      case "listFiles":
+        this.postPanel({ type: "files", query: m.query, files: await this.findFiles(m.query) });
         break;
       case "openDiff":
         await this.diffs.open(m.path, m.oldText, m.newText);
@@ -259,285 +343,54 @@ export class HarnessPanel implements vscode.Disposable {
       case "listSessions":
         await this.listSessions();
         break;
-      case "loadSession":
-        await this.loadSession(m.id);
+      case "openSession": {
+        const open = [...this.tabs.values()].find((t) => t.sessionId === m.id);
+        if (open) this.activate(open.id);
+        else this.newTab(m.id);
         break;
-      case "newSession":
-        this.post({ type: "clear" });
-        await this.startSession();
+      }
+      case "newTab":
+        this.newTab();
+        break;
+      case "closeTab":
+        this.closeTab(m.id);
+        break;
+      case "switchTab":
+        if (this.tabs.has(m.id)) this.activate(m.id);
         break;
     }
   }
 
-  // MARK: Agent session
-
-  private async startSession(loadSessionId?: string): Promise<void> {
-    this.session?.dispose();
-    this.session = undefined;
-    this.turn = null;
-    this.silence();
-    this.resolveAllPermissions();
-    this.post({ type: "state", state: "starting", detail: "Starting Claude…" });
-
-    const config = vscode.workspace.getConfiguration("voiceHarness");
-    const nodePath = resolveTool("node", config.get<string>("nodePath"));
-    const claudePath = resolveTool("claude", config.get<string>("claudePath"));
-    const agentEntry = this.runtimeFile(path.join("node_modules", "@agentclientprotocol", "claude-agent-acp", "dist", "index.js"));
-    const mcpServerScript = path.join(this.context.extensionPath, "dist", "mcpServer.mjs");
-
-    const missing = [
-      !nodePath && "node (set voiceHarness.nodePath)",
-      !claudePath && "claude CLI (set voiceHarness.claudePath)",
-      !existsSync(agentEntry) && `claude-agent-acp at ${agentEntry} (run npm install)`,
-      !existsSync(mcpServerScript) && `${mcpServerScript} (run npm run build)`,
-    ].filter(Boolean);
-    if (missing.length) {
-      this.post({ type: "state", state: "error", detail: `Cannot start — missing: ${missing.join("; ")}` });
-      return;
-    }
-
-    try {
-      this.session = await AgentSession.start({
-        workspace: this.workspace,
-        nodePath: nodePath!,
-        claudePath: claudePath!,
-        agentEntry,
-        mcpServerScript,
-        systemPromptAppend: SPEECH_LAYER,
-        loadSessionId,
-        handlers: {
-          onConfigOptions: (options) => this.postOptions(options),
-          onUsage: (usage) => this.post({ type: "usage", used: usage.used, size: usage.size }),
-          onTitle: (title) => this.setTitle(title),
-          onCommands: (commands) => this.post({ type: "commands", commands }),
-          onText: (chunk) => {
-            this.flushReplayedUser();
-            this.post({ type: "agentText", chunk });
-            if (!this.replaying) this.speak(this.chunker.push(chunk));
-          },
-          onUserText: (chunk) => {
-            if (this.replaying) this.replayUser += chunk;
-          },
-          onToolCall: (t, isUpdate) => {
-            this.flushReplayedUser();
-            this.post({
-              type: "tool",
-              id: t.id,
-              title: t.title,
-              kind: t.kind,
-              status: t.status,
-              name: t.name,
-              content: t.content,
-              hidden: t.name?.startsWith("mcp__harness__"),
-              isUpdate,
-            });
-            if (this.replaying) return;
-            if (!isUpdate) this.speak(this.chunker.flush());
-            if (t.locations.length && (t.kind === "read" || t.kind === "edit")) void this.editor.follow(t.locations);
-          },
-          onPermission: (req, signal) => this.askPermission(req, signal),
-          onShowCode: async (range) => this.inStepWithSpeech(() => void this.editor.showCode(range)),
-          onExplainCode: async (step) => this.steps.push(step, step.step),
-          onClearHighlight: async () => this.inStepWithSpeech(() => this.editor.clearHighlight()),
-          onShowFigure: (figure) => this.showFigure(figure),
-          onShowLiveChart: (chart) => this.showLiveChart(chart),
-          onLog: (line) => this.output.appendLine(line),
-          onExit: (reason) => {
-            this.session = undefined;
-            this.resolveAllPermissions();
-            this.post({ type: "state", state: "stopped", detail: `${reason}. Use Restart to begin a new session.` });
-          },
-        },
-      });
-      this.output.appendLine(`session ${this.session.sessionId} (${this.session.loginSummary}) in ${this.workspace}`);
-      this.post({ type: "state", state: "ready", detail: this.session.loginSummary });
-    } catch (err) {
-      const detail = err instanceof BillingGuardError ? `Billing guard: ${err.problems.join("; ")}` : (err as Error).message;
-      this.output.appendLine(`start failed: ${detail}`);
-      this.post({ type: "state", state: "error", detail });
-    }
+  /** Workspace files matching what the user typed after @ (paths relative to the workspace). */
+  private async findFiles(query: string): Promise<string[]> {
+    const safe = query.replace(/[^\w./-]/g, "");
+    const pattern = safe ? `**/*${safe.split("/").pop()}*` : "*";
+    const uris = await vscode.workspace.findFiles(
+      new vscode.RelativePattern(this.workspace, pattern),
+      "{**/node_modules/**,**/.git/**,**/.build/**,**/dist/**,**/build/**,**/.venv/**,**/__pycache__/**}",
+      300,
+    );
+    return uris.map((u) => path.relative(this.workspace, u.fsPath)).sort();
   }
-
-  // MARK: Session bar
-
-  /** Settings shown in the session bar, in this order; others the agent offers are not shown. */
-  private static readonly SHOWN_OPTIONS = ["model", "mode", "effort", "fast"];
-  /** Never offered in the mode picker (the user's AI security protocol rules it out). */
-  private static readonly HIDDEN_CHOICES = new Set(["bypassPermissions"]);
-
-  private postOptions(options: ConfigOption[]): void {
-    const shown = HarnessPanel.SHOWN_OPTIONS.flatMap((id) => {
-      const o = options.find((x) => x.id === id);
-      if (!o) return [];
-      return [{ ...o, choices: o.choices.filter((c) => !HarnessPanel.HIDDEN_CHOICES.has(c.value) || c.value === o.current) }];
-    });
-    this.post({ type: "options", options: shown });
-  }
-
-  private setTitle(title: string): void {
-    const clean = HarnessPanel.withoutEditorContext(title).trim();
-    if (!clean) return;
-    this.host.setTitle(`Voice Harness: ${clean}`);
-    this.post({ type: "title", title: clean });
-  }
-
-  // MARK: Past sessions
 
   private async listSessions(): Promise<void> {
-    if (!this.session) return;
+    const agent = this.active?.agent ?? [...this.tabs.values()].find((t) => t.agent)?.agent;
+    if (!agent) return;
     try {
-      const items = (await this.session.list()).map((s) => ({
+      const openIn = new Map([...this.tabs.values()].filter((t) => t.sessionId).map((t) => [t.sessionId!, t.id]));
+      const items = (await agent.list()).map((s) => ({
         id: s.id,
-        title: HarnessPanel.withoutEditorContext(s.title ?? "").trim() || "Untitled conversation",
+        title: withoutEditorContext(s.title ?? "").trim() || "Untitled conversation",
         updatedAt: s.updatedAt,
+        openInTab: openIn.get(s.id),
       }));
-      this.post({ type: "sessions", items, currentId: this.session.sessionId });
+      this.postPanel({ type: "sessions", items });
     } catch (err) {
-      this.post({ type: "notice", text: `Could not list conversations: ${(err as Error).message}` });
+      this.postPanel({ type: "notice", text: `Could not list conversations: ${(err as Error).message}` });
     }
   }
 
-  /** Replaces the chat with a past conversation, replayed silently. */
-  private async loadSession(id: string): Promise<void> {
-    if (!this.session) return;
-    this.silence();
-    if (this.turn) {
-      this.session.cancel();
-      await this.turn;
-    }
-    this.post({ type: "clear" });
-    this.post({ type: "state", state: "starting", detail: "Loading conversation…" });
-    this.replaying = true;
-    this.replayUser = "";
-    try {
-      await this.session.load(id);
-      this.flushReplayedUser();
-      this.post({ type: "notice", text: "Conversation restored. New messages continue it." });
-    } catch (err) {
-      this.post({ type: "error", text: `Could not load the conversation: ${(err as Error).message}` });
-    } finally {
-      this.replaying = false;
-      this.post({ type: "state", state: "ready", detail: this.session?.loginSummary });
-    }
-  }
-
-  private flushReplayedUser(): void {
-    if (!this.replayUser) return;
-    const text = HarnessPanel.withoutEditorContext(this.replayUser).trim();
-    this.replayUser = "";
-    if (text) this.post({ type: "user", text, spoken: false });
-  }
-
-  private static withoutEditorContext(text: string): string {
-    return text.replace(/<editor-context>[\s\S]*?<\/editor-context>\s*/g, "");
-  }
-
-  /** Starts a user turn, cancelling (and silencing) any turn still running. */
-  private async send(text: string, spoken: boolean, images: { mimeType: string; data: string }[] = []): Promise<void> {
-    if (!this.session) return;
-    this.awaitingReply = false;
-    if (this.autoTurn.running) this.cancelListening();
-    this.silence();
-    if (this.turn) {
-      this.session.cancel();
-      await this.turn;
-    }
-    const session = this.session;
-    if (!session) return;
-    this.suppressSpeech = false;
-    // A slash command must start the message, so it is sent without editor context.
-    const context =
-      !text.startsWith("/") && vscode.workspace.getConfiguration("voiceHarness").get<boolean>("sendEditorContext", true)
-        ? this.tracker.current()
-        : undefined;
-    const prompt = context ? `${formatEditorContext(context)}\n\n${text}` : text;
-    const attachments: Attachment[] = [
-      ...this.mentionedFiles(text),
-      ...images.map((i) => ({ kind: "image" as const, mimeType: i.mimeType, data: i.data })),
-    ];
-    this.post({ type: "partial", text: "", source: null });
-    this.post({
-      type: "user",
-      text,
-      spoken,
-      context: context ? editorContextLabel(context) : undefined,
-      attachments: attachments.map((a) => (a.kind === "file" ? path.relative(this.workspace, a.path) : "pasted image")),
-    });
-    this.post({ type: "state", state: "busy" });
-    // `turn` is read in `finally`, which always runs after this assignment completes.
-    let turn!: Promise<void>;
-    turn = (async () => {
-      try {
-        const stopReason = await session.prompt(prompt, attachments);
-        this.speak(this.chunker.flush());
-        this.post({ type: "turnEnd", stopReason });
-        if (stopReason === "end_turn" && !this.suppressSpeech) {
-          this.awaitingReply = true;
-          // With no speech in flight, listen now; otherwise speechIdle starts it.
-          if (!this.speechPending) setTimeout(() => this.maybeListenForReply(), 0);
-        }
-      } catch (err) {
-        this.post({ type: "error", text: (err as Error).message });
-      } finally {
-        if (this.turn === turn) this.turn = null;
-        this.post({ type: "state", state: this.session ? "ready" : "stopped", detail: this.session?.loginSummary });
-        if (this.turn === null && this.queue.length) {
-          this.awaitingReply = false;
-          const next = this.queue.shift()!;
-          this.post({ type: "dequeued", id: next.id });
-          setTimeout(() => void this.send(next.text, false, next.images), 0);
-        }
-      }
-    })();
-    this.turn = turn;
-    await turn;
-  }
-
-  /** Workspace files for @-completion, relative to the root (cached for 30 s). */
-  private async workspaceFiles(): Promise<string[]> {
-    if (this.fileList && Date.now() - this.fileList.at < 30_000) return this.fileList.files;
-    const uris = await vscode.workspace.findFiles(
-      new vscode.RelativePattern(this.workspace, "**/*"),
-      "{**/node_modules/**,**/.git/**,**/.build/**,**/dist/**,**/build/**}",
-      5000,
-    );
-    const files = uris.map((u) => path.relative(this.workspace, u.fsPath)).sort();
-    this.fileList = { files, at: Date.now() };
-    return files;
-  }
-
-  /** Files named with @path in a message that exist inside the workspace. */
-  private mentionedFiles(text: string): Attachment[] {
-    const out: Attachment[] = [];
-    for (const m of text.matchAll(/(?:^|\s)@([^\s]+)/g)) {
-      const file = path.resolve(this.workspace, m[1].replace(/[.,;:!?)]+$/, ""));
-      if (!file.startsWith(this.workspace + path.sep) || !existsSync(file) || !statSync(file).isFile()) continue;
-      if (!out.some((a) => a.kind === "file" && a.path === file)) out.push({ kind: "file", path: file });
-    }
-    return out;
-  }
-
-  private enqueue(text: string, images: { mimeType: string; data: string }[]): void {
-    const id = randomBytes(6).toString("hex");
-    this.queue.push({ id, text, images });
-    this.post({ type: "queued", id, text, images: images.length });
-  }
-
-  private removeQueued(id: string): { id: string; text: string; images: { mimeType: string; data: string }[] } | undefined {
-    const index = this.queue.findIndex((q) => q.id === id);
-    if (index < 0) return undefined;
-    const [item] = this.queue.splice(index, 1);
-    this.post({ type: "dequeued", id });
-    return item;
-  }
-
-  private stopEverything(): void {
-    for (const q of this.queue.splice(0)) this.post({ type: "dequeued", id: q.id });
-    this.awaitingReply = false;
-    this.silence();
-    if (this.voiceState === "listening" || this.voiceState === "warming") this.cancelListening();
-    this.session?.cancel();
-  }
+  // MARK: Voice
 
   private cancelListening(): void {
     this.autoTurn.stop();
@@ -546,14 +399,13 @@ export class HarnessPanel implements vscode.Disposable {
 
   /** In conversation mode, opens the mic for the user's reply once Claude has finished speaking. */
   private maybeListenForReply(): void {
-    if (!this.conversation || !this.awaitingReply || this.turn || this.queue.length || !this.voice || !this.microphone) return;
+    const tab = this.active;
+    if (!this.conversation || !this.awaitingReply || !tab?.quiet || !this.voice || !this.microphone) return;
     if (this.voiceState !== "idle") return;
     this.awaitingReply = false;
     this.autoTurn.start();
     this.voice.listenStart();
   }
-
-  // MARK: Voice
 
   private startVoice(): void {
     const config = vscode.workspace.getConfiguration("voiceHarness");
@@ -575,7 +427,6 @@ export class HarnessPanel implements vscode.Disposable {
       onExit: (reason) => {
         this.voice = undefined;
         this.pendingMarks.clear();
-        this.chunker.reset();
         this.speechPending = false;
         this.autoTurn.stop();
         this.output.appendLine(reason);
@@ -586,7 +437,7 @@ export class HarnessPanel implements vscode.Disposable {
           return;
         }
         this.setVoice("loading", "Voice stopped unexpectedly; restarting…");
-        this.post({ type: "notice", text: "The voice process stopped unexpectedly and is restarting." });
+        this.postPanel({ type: "notice", text: "The voice process stopped unexpectedly and is restarting." });
         setTimeout(() => {
           if (!this.disposed && !this.voice) this.startVoice();
         }, delay);
@@ -595,6 +446,7 @@ export class HarnessPanel implements vscode.Disposable {
   }
 
   private onVoiceEvent(e: VoiceEvent): void {
+    const mic = () => (this.inputDevice ? `mic: ${this.inputDevice}` : undefined);
     switch (e.event) {
       case "loading":
         this.setVoice("loading", "Loading voice…");
@@ -603,16 +455,16 @@ export class HarnessPanel implements vscode.Disposable {
         this.microphone = e.microphone;
         this.output.appendLine(`voice ready: ${JSON.stringify(e)}`);
         this.inputDevice = e.inputDevice;
-        this.setVoice("idle", e.microphone ? `mic: ${e.inputDevice}` : "microphone unavailable — speech output only");
+        this.setVoice("idle", e.microphone ? mic() : "microphone unavailable — speech output only");
         break;
       case "deviceChanged":
         this.inputDevice = e.input;
         this.output.appendLine(`audio devices changed: input ${e.input}, output ${e.output}`);
-        this.post({ type: "notice", text: `Audio switched to ${e.output} (mic: ${e.input}).` });
-        this.setVoice(this.voiceState === "listening" ? "listening" : "idle", `mic: ${e.input}`);
+        this.postPanel({ type: "notice", text: `Audio switched to ${e.output} (mic: ${e.input}).` });
+        this.setVoice(this.voiceState === "listening" ? "listening" : "idle", mic());
         break;
       case "level":
-        this.post({ type: "level", db: e.db });
+        this.postPanel({ type: "level", db: e.db });
         break;
       case "micStats":
         this.output.appendLine(`[voice] mic during turn: ${JSON.stringify(e)}`);
@@ -629,7 +481,7 @@ export class HarnessPanel implements vscode.Disposable {
       case "speechIdle":
         this.speechPending = false;
         if (this.voiceState === "speaking") this.setVoice("idle");
-        if (!this.turn) this.maybeListenForReply();
+        if (!this.active?.busy) this.maybeListenForReply();
         break;
       case "speechStart":
         this.autoTurn.speechStart();
@@ -638,26 +490,26 @@ export class HarnessPanel implements vscode.Disposable {
         this.autoTurn.speechEnd();
         break;
       case "micWarming":
-        this.setVoice("warming", this.inputDevice ? `mic: ${this.inputDevice}` : undefined);
+        this.setVoice("warming", mic());
         break;
       case "listening":
-        this.setVoice("listening", this.inputDevice ? `mic: ${this.inputDevice}` : undefined);
+        this.setVoice("listening", mic());
         break;
       case "partial":
         if (e.source === "user") this.autoTurn.partialText(e.text);
-        this.post({ type: "partial", text: e.text, source: e.source });
+        this.postPanel({ type: "partial", text: e.text, source: e.source });
         break;
       case "transcript":
         this.autoTurn.stop();
-        this.setVoice("idle", this.inputDevice ? `mic: ${this.inputDevice}` : undefined);
-        this.post({ type: "partial", text: "", source: null });
-        if (e.text) void this.send(e.text, true);
-        else this.post({ type: "notice", text: "Didn't catch anything." });
+        this.setVoice("idle", mic());
+        this.postPanel({ type: "partial", text: "", source: null });
+        if (e.text) void this.active?.send(e.text, true);
+        else this.postPanel({ type: "notice", text: "Didn't catch anything." });
         break;
       case "listenCancelled":
         this.autoTurn.stop();
-        this.setVoice("idle");
-        this.post({ type: "partial", text: "", source: null });
+        this.setVoice("idle", mic());
+        this.postPanel({ type: "partial", text: "", source: null });
         break;
       case "bargeIn":
         this.setVoice("interrupted");
@@ -665,31 +517,30 @@ export class HarnessPanel implements vscode.Disposable {
       case "interruption": {
         const action = classifyInterruption(e.text);
         this.output.appendLine(`interruption "${e.text}" → ${action}`);
-        this.post({ type: "partial", text: "", source: null });
+        this.postPanel({ type: "partial", text: "", source: null });
         if (action === "resume") {
           this.voice?.resumeSpeaking();
           this.setVoice("speaking");
         } else {
           this.setVoice("idle");
-          void this.send(e.text, true);
+          void this.active?.send(e.text, true);
         }
         break;
       }
-      case "spoke":
-        break;
       case "marked": {
         const effect = this.pendingMarks.get(e.id);
         this.pendingMarks.delete(e.id);
         effect?.();
         break;
       }
+      case "spoke":
       case "rendered":
       case "voices":
         break;
       case "error":
-        if (this.voiceState === "warming") this.setVoice("idle", this.inputDevice ? `mic: ${this.inputDevice}` : undefined);
+        if (this.voiceState === "warming") this.setVoice("idle", mic());
         this.output.appendLine(`voice error: ${e.message}`);
-        this.post({ type: "notice", text: `Voice: ${e.message}` });
+        this.postPanel({ type: "notice", text: `Voice: ${e.message}` });
         break;
       case "fatal":
         this.output.appendLine(`voice fatal: ${e.message}`);
@@ -701,10 +552,10 @@ export class HarnessPanel implements vscode.Disposable {
     }
   }
 
-  /** Talk key: start a spoken turn, or end the one in progress. */
+  /** Talk key: start a spoken turn in the visible tab, or end the one in progress. */
   private talk(): void {
     if (!this.voice || !this.microphone || this.voiceState === "loading" || this.voiceState === "unavailable") {
-      this.post({ type: "notice", text: "Voice input isn't available yet." });
+      this.postPanel({ type: "notice", text: "Voice input isn't available yet." });
       return;
     }
     if (this.voiceState === "listening") {
@@ -715,52 +566,8 @@ export class HarnessPanel implements vscode.Disposable {
     this.awaitingReply = false;
     if (this.voiceState === "warming") return;
     // Whatever the agent says next belongs to the turn being replaced.
-    this.silence();
+    this.active?.silence();
     this.voice.listenStart();
-  }
-
-  /**
-   * Applies an editor effect when speech reaches the point where the agent asked for it, so
-   * highlights move with the spoken explanation rather than with (faster) generation. Without
-   * speech the effect applies at once.
-   */
-  private inStepWithSpeech(effect: () => void): void {
-    if (!this.voice || !this.speakReplies || this.suppressSpeech || this.voiceState === "loading" || this.voiceState === "unavailable") {
-      effect();
-      return;
-    }
-    this.pendingMarks.set(this.voice.mark(), effect);
-  }
-
-  /** One walkthrough step: its words in the chat, its highlight as speech reaches it, then its words spoken. */
-  private presentStep(step: ExplainStep): void {
-    this.speak(this.chunker.flush());
-    this.post({
-      type: "step",
-      file: path.relative(this.workspace, step.range.path),
-      startLine: step.range.startLine,
-      endLine: step.range.endLine,
-      text: step.say,
-    });
-    this.inStepWithSpeech(() => void this.editor.showCode(step.range));
-    const words = new SpeechChunker();
-    this.speak([...words.push(step.say + "\n"), ...words.flush()]);
-  }
-
-  private speak(sentences: string[]): void {
-    if (!this.voice || !this.speakReplies || this.suppressSpeech) return;
-    for (const s of sentences) this.voice.speak(s);
-    if (sentences.length) this.speechPending = true;
-  }
-
-  /** Stops speech now and drops speech for the rest of the current turn. */
-  private silence(): void {
-    this.suppressSpeech = true;
-    this.speechPending = false;
-    this.pendingMarks.clear();
-    this.steps.reset();
-    this.chunker.reset();
-    this.voice?.stopSpeaking();
   }
 
   private setVoice(state: VoiceUiState, detail?: string): void {
@@ -770,7 +577,7 @@ export class HarnessPanel implements vscode.Disposable {
   }
 
   private postVoice(): void {
-    this.post({
+    this.postPanel({
       type: "voice",
       state: this.voiceState,
       speak: this.speakReplies,
@@ -781,121 +588,7 @@ export class HarnessPanel implements vscode.Disposable {
     });
   }
 
-  // MARK: Figures
-
-  private static readonly IMAGE_TYPES: Record<string, string> = {
-    ".png": "image/png",
-    ".jpg": "image/jpeg",
-    ".jpeg": "image/jpeg",
-    ".gif": "image/gif",
-    ".webp": "image/webp",
-    ".svg": "image/svg+xml",
-  };
-  private static readonly MAX_IMAGE_BYTES = 15 * 1024 * 1024;
-
-  private static readonly MAX_LIVE_CHARTS = 3;
-  private static readonly MAX_LIVE_READ_BYTES = 4 * 1024 * 1024;
-
-  private async showLiveChart(chart: LiveChart): Promise<{ ok: true } | { ok: false; error: string }> {
-    const { id, result } = await this.sendFigure({ kind: "vega-lite", content: chart.spec, caption: chart.caption }, true);
-    if (result.ok) this.followDataFile(id, chart.dataFile);
-    return result;
-  }
-
-  /** Re-reads the data file whenever its size or modification time changes, about once a second. */
-  private followDataFile(id: string, file: string): void {
-    if (this.liveCharts.size >= HarnessPanel.MAX_LIVE_CHARTS) {
-      const [oldest, timer] = this.liveCharts.entries().next().value!;
-      clearInterval(timer);
-      this.liveCharts.delete(oldest);
-    }
-    let lastSeen = "";
-    const tick = () => {
-      let seen = "missing";
-      try {
-        const st = statSync(file);
-        seen = `${st.size}:${st.mtimeMs}`;
-      } catch {
-        // not written yet
-      }
-      if (seen === lastSeen || seen === "missing") return;
-      lastSeen = seen;
-      try {
-        this.post({ type: "figureData", id, rows: parseDataFile(file, HarnessPanel.readTail(file)) });
-      } catch (err) {
-        this.output.appendLine(`live chart: could not read ${file}: ${(err as Error).message}`);
-      }
-    };
-    tick();
-    this.liveCharts.set(id, setInterval(tick, 1000));
-  }
-
-  /** The file's text, or only its last few megabytes (from a line start) when it is large. */
-  private static readTail(file: string): string {
-    const size = statSync(file).size;
-    if (size <= HarnessPanel.MAX_LIVE_READ_BYTES) return readFileSync(file, "utf8");
-    const fd = openSync(file, "r");
-    try {
-      const buffer = Buffer.alloc(HarnessPanel.MAX_LIVE_READ_BYTES);
-      readSync(fd, buffer, 0, buffer.length, size - buffer.length);
-      const text = buffer.toString("utf8");
-      return text.slice(text.indexOf("\n") + 1);
-    } finally {
-      closeSync(fd);
-    }
-  }
-
-  private async showFigure(figure: Figure): Promise<{ ok: true } | { ok: false; error: string }> {
-    return (await this.sendFigure(figure, false)).result;
-  }
-
-  /** Sends a figure to the webview and waits (up to 10 s) for it to report whether it rendered. */
-  private async sendFigure(figure: Figure, live: boolean): Promise<{ id: string; result: { ok: true } | { ok: false; error: string } }> {
-    let content = figure.content;
-    if (figure.kind === "image") {
-      const type = HarnessPanel.IMAGE_TYPES[path.extname(figure.content).toLowerCase()];
-      const fail = (error: string) => ({ id: "", result: { ok: false as const, error } });
-      if (!type) return fail("unsupported image type");
-      if (!existsSync(figure.content)) return fail(`no such file: ${figure.content}`);
-      if (statSync(figure.content).size > HarnessPanel.MAX_IMAGE_BYTES) return fail("image is larger than 15 MB");
-      content = `data:${type};base64,${readFileSync(figure.content).toString("base64")}`;
-    }
-    const id = randomBytes(8).toString("hex");
-    const result = await new Promise<{ ok: boolean; error?: string }>((resolve) => {
-      const finish = (r: { ok: boolean; error?: string }) => {
-        if (!this.pendingFigures.delete(id)) return;
-        resolve(r);
-      };
-      this.pendingFigures.set(id, finish);
-      setTimeout(() => finish({ ok: false, error: "the panel did not report rendering within 10 s" }), 10_000);
-      this.post({ type: "figure", id, kind: figure.kind, content, caption: figure.caption, live });
-    });
-    return { id, result: result.ok ? { ok: true } : { ok: false, error: result.error ?? "rendering failed" } };
-  }
-
-  // MARK: Permissions
-
-  private askPermission(req: PermissionRequest, signal: AbortSignal): Promise<string | null> {
-    const requestId = randomBytes(8).toString("hex");
-    return new Promise((resolve) => {
-      const finish = (optionId: string | null) => {
-        if (!this.pendingPermissions.delete(requestId)) return;
-        this.post({ type: "permissionDone", requestId });
-        resolve(optionId);
-      };
-      this.pendingPermissions.set(requestId, finish);
-      signal.addEventListener("abort", () => finish(null), { once: true });
-      this.post({ type: "permission", requestId, title: req.title, kind: req.kind, content: req.content, options: req.options });
-    });
-  }
-
-  private resolveAllPermissions(): void {
-    for (const finish of [...this.pendingPermissions.values()]) finish(null);
-  }
-
   // MARK: Webview
-
-  static readonly DEFAULT_MODELS = path.join(os.homedir(), "Library", "Application Support", "voice-harness", "models");
 
   /**
    * A file the extension runs: inside the extension when packaged (`.vsix`), otherwise in the
@@ -921,16 +614,17 @@ export class HarnessPanel implements vscode.Disposable {
 <title>Voice Harness</title>
 </head>
 <body>
+<nav id="tabs" class="tabs"><div id="tab-list" class="tab-list"></div><button id="new-tab" class="tab-new secondary" title="New conversation">+</button></nav>
 <header>
   <div id="title" class="conversation-title" hidden></div>
   <div id="status" class="status starting">Starting…</div>
   <div id="session-bar" class="session-bar"><span id="options" class="options"></span><span id="usage" class="usage"></span></div>
   <div id="voice" class="voice loading">Voice loading…</div>
 </header>
-<main id="log"></main>
+<div id="logs" class="logs"></div>
 <div id="partial" class="partial" hidden></div>
 <div id="session-menu" class="session-menu" hidden>
-  <div class="session-menu-head"><span>Conversations in this folder</span><button id="session-new" class="secondary">+ New conversation</button><button id="session-close" class="secondary" title="Close">✕</button></div>
+  <div class="session-menu-head"><span>Conversations in this folder</span><button id="session-new" class="secondary">+ New tab</button><button id="session-close" class="secondary" title="Close">✕</button></div>
   <div id="session-list" class="session-list"></div>
 </div>
 <footer>
@@ -943,7 +637,7 @@ export class HarnessPanel implements vscode.Disposable {
     <button id="sessions" class="secondary" title="Past conversations in this folder">☰ Sessions</button>
     <button id="conversation" class="secondary" title="After Claude replies, listen for your answer; a pause ends it">💬 Conversation on</button>
     <button id="speak" class="secondary" title="Speak Claude's replies">🔊 Voice on</button>
-    <button id="restart" class="secondary">Restart</button>
+    <button id="restart" class="secondary" title="Start this tab over with a new session">Restart</button>
   </div>
 </footer>
 <script nonce="${nonce}" src="${asset("webview.js")}"></script>
@@ -955,14 +649,12 @@ export class HarnessPanel implements vscode.Disposable {
     if (this.disposed) return;
     this.disposed = true;
     HarnessPanel.current = undefined;
-    this.resolveAllPermissions();
-    for (const finish of [...this.pendingFigures.values()]) finish({ ok: false, error: "the panel was closed" });
-    for (const timer of this.liveCharts.values()) clearInterval(timer);
-    this.liveCharts.clear();
-    this.session?.dispose();
+    for (const tab of this.tabs.values()) tab.dispose();
+    this.tabs.clear();
     this.voice?.dispose();
     this.editor.dispose();
     this.tracker.dispose();
     this.diffs.dispose();
   }
 }
+

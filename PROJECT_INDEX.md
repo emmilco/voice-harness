@@ -35,7 +35,9 @@ voice-harness/
 │   ├── esbuild.mjs    # bundles extension.js, mcpServer.mjs, webview.js into dist/ (gitignored)
 │   ├── src/
 │   │   ├── extension.ts     # activation, commands
-│   │   ├── panel.ts         # chat panel: owns the session, permissions, webview HTML/CSP
+│   │   ├── panel.ts         # chat panel: tabs, shared voice process, conversation mode, editor effects, webview HTML/CSP
+│   │   ├── chatTab.ts       # one conversation tab: agent session, transcript, queue, permissions, figures, rewind
+│   │   ├── diffView.ts      # opens agent edits in VS Code's diff editor
 │   │   ├── editorControl.ts # show_code highlight and follow-along reveal
 │   │   ├── editorTracker.ts # remembers the user's last file editor for editor context
 │   │   ├── protocol.ts      # extension ↔ webview message types
