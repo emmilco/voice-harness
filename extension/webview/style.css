@@ -35,7 +35,6 @@ body {
   line-height: 1.55;
   color: var(--vh-text);
   background: var(--vh-page);
-  -webkit-font-smoothing: antialiased;
 }
 
 button {
@@ -175,7 +174,8 @@ body.reading-serif .message.agent, body.reading-serif .step-body {
      reach it, otherwise Iowan Old Style; both are tighter on screen than Charter. */
   font-family: ui-serif, "New York", "Iowan Old Style", Georgia, serif;
   font-optical-sizing: auto;
-  font-size: 1.07em;
+  /* One pixel up from the interface size: a whole-pixel size draws letters on even positions. */
+  font-size: calc(var(--vscode-font-size) + 1px);
   line-height: 1.62;
   max-width: 66ch;
   font-kerning: normal;
