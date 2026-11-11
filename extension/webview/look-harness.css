@@ -81,20 +81,19 @@ body.look-harness.page-dark {
 /* ---------------------------------------------------------------- chrome */
 
 body.look-harness .tabs { padding: 12px var(--vh-pad) 0; border-bottom: none; gap: 2px; }
-/* Tabs that do not fit scroll out of view rather than crushing; the menu lists them all. */
-body.look-harness .tab-list { gap: 2px; mask-image: linear-gradient(90deg, #000 calc(100% - 18px), transparent); }
+body.look-harness .tab-list { gap: 2px; }
 body.look-harness .tab {
-  padding: 3px 9px 7px; border-radius: 0; max-width: 220px; gap: 6px;
+  padding: 3px 9px 7px; border-radius: 0; max-width: 240px; gap: 6px;
   color: var(--vh-quiet); background: none; box-shadow: none;
   border-bottom: 1.5px solid transparent;
 }
 body.look-harness .tab:hover { color: var(--vh-text); background: none; }
 body.look-harness .tab.active { color: var(--vh-text); background: none; box-shadow: none; border-bottom-color: var(--vh-text); }
-body.look-harness .tab:not(.active) .tab-title, body.look-harness .tab:not(.active) .tab-close { display: none; }
-body.look-harness .tab-project { font-weight: 500; color: inherit; }
-body.look-harness .tab-project::after { content: ""; margin: 0; }
-body.look-harness .tab.active .tab-project::after { content: "/"; margin: 0 2px 0 6px; color: var(--vh-quiet); }
-body.look-harness .tab-title { color: var(--vh-quiet); }
+/* Every tab shows its title (truncated); the active one is the only one with a close. */
+body.look-harness .tab:not(.active) .tab-close { display: none; }
+body.look-harness .tab-project { font-weight: 500; color: inherit; flex-shrink: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+body.look-harness .tab-project::after { content: "/"; margin: 0 2px 0 6px; color: var(--vh-quiet); }
+body.look-harness .tab-title { color: var(--vh-quiet); flex: 1 1 0; }
 body.look-harness .tab-mark.unread { background: var(--vh-accent); }
 body.look-harness .tab-close { width: 16px; height: 16px; }
 body.look-harness .icon-button { width: 26px; height: 26px; border-radius: 3px; }

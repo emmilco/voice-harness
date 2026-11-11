@@ -666,11 +666,14 @@ export class HarnessPanel implements vscode.Disposable, TabServices {
         break;
       case "error":
         if (this.voiceState === "warming") this.setVoice("idle", mic());
+        // A Talk that never reached "listening" must not keep the reply held.
+        if (this.held && this.voiceState !== "listening") this.releaseHeld();
         this.output.appendLine(`voice error: ${e.message}`);
         this.postPanel({ type: "notice", text: `Speech: ${e.message}` });
         break;
       case "fatal":
         this.output.appendLine(`voice fatal: ${e.message}`);
+        this.held = null;
         this.setVoice("unavailable", e.message);
         break;
       case "log":

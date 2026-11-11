@@ -72,6 +72,13 @@ export class ChatTab {
   /** True from a cancel until the next turn starts: the cancelled turn's speech is dropped. */
   private suppressSpeech = false;
   private turn: Promise<void> | null = null;
+  /**
+   * Bumped whenever a turn is superseded (a new send, a restart, a rewind). A turn's cleanup
+   * acts only if the generation it started under is still current, so a cancelled turn
+   * cannot dequeue the next message under the one that replaced it, or report errors into a
+   * transcript that has since been cleared.
+   */
+  private generation = 0;
   private readonly queue: { id: string; text: string; images: Image[] }[] = [];
   private readonly pendingPermissions = new Map<string, (optionId: string | null) => void>();
   private readonly pendingFigures = new Map<string, (result: { ok: boolean; error?: string }) => void>();
@@ -190,11 +197,17 @@ export class ChatTab {
 
   /** Starts a new agent session, or loads (and replays) a past one. */
   async start(loadSessionId?: string): Promise<void> {
+    this.generation++;
+    const old = this.turn;
+    this.session?.cancel();
     this.session?.dispose();
     this.session = undefined;
     this.turn = null;
+    if (old) await old.catch(() => {});
     this.silence();
     this.resolveAllPermissions();
+    this.clearQueue();
+    this.stopLiveCharts();
     this.turns = [];
     this.lastAssistantId = undefined;
     this.title = undefined;
@@ -271,7 +284,7 @@ export class ChatTab {
           onExit: (reason) => {
             this.session = undefined;
             this.resolveAllPermissions();
-            for (const q of this.queue.splice(0)) this.post({ type: "dequeued", id: q.id });
+            this.clearQueue();
             this.setState("stopped", `${reason}. Use Restart to begin a new session.`);
           },
         },
@@ -294,6 +307,7 @@ export class ChatTab {
     if (!this.session) return;
     this.silence();
     if (this.turn) {
+      this.generation++;
       this.session.cancel();
       await this.turn;
     }
@@ -317,27 +331,32 @@ export class ChatTab {
       turn: this.turns.length - 1,
     });
     this.setState("busy");
+    const generation = this.generation;
     // `turn` is read in `finally`, which always runs after this assignment completes.
     let turn!: Promise<void>;
     turn = (async () => {
       let finishedNormally = false;
       try {
         const stopReason = await session.prompt(prompt, attachments);
+        if (generation !== this.generation) return;
         this.endSegment();
         this.post({ type: "turnEnd", stopReason });
         finishedNormally = stopReason === "end_turn" && !this.suppressSpeech;
       } catch (err) {
-        this.post({ type: "error", text: (err as Error).message });
+        if (generation === this.generation) this.post({ type: "error", text: (err as Error).message });
       } finally {
         if (this.turn === turn) this.turn = null;
-        this.setState(this.session ? "ready" : "stopped", this.session?.loginSummary);
-        this.noteOutput();
-        if (this.turn === null && this.queue.length) {
-          const next = this.queue.shift()!;
-          this.post({ type: "dequeued", id: next.id });
-          setTimeout(() => void this.send(next.text, false, next.images), 0);
-        } else if (finishedNormally) {
-          this.services.turnFinished(this);
+        // A superseded turn leaves state to whatever replaced it.
+        if (generation === this.generation) {
+          this.setState(this.session ? "ready" : "stopped", this.session?.loginSummary);
+          this.noteOutput();
+          if (this.turn === null && this.queue.length) {
+            const next = this.queue.shift()!;
+            this.post({ type: "dequeued", id: next.id });
+            setTimeout(() => void this.send(next.text, false, next.images), 0);
+          } else if (finishedNormally) {
+            this.services.turnFinished(this);
+          }
         }
       }
     })();
@@ -346,9 +365,18 @@ export class ChatTab {
   }
 
   stop(): void {
-    for (const q of this.queue.splice(0)) this.post({ type: "dequeued", id: q.id });
+    this.clearQueue();
     this.silence();
     this.session?.cancel();
+  }
+
+  private clearQueue(): void {
+    for (const q of this.queue.splice(0)) this.post({ type: "dequeued", id: q.id });
+  }
+
+  private stopLiveCharts(): void {
+    for (const timer of this.liveCharts.values()) clearInterval(timer);
+    this.liveCharts.clear();
   }
 
   /** Drops this tab's speech for the rest of the current turn. */
@@ -380,8 +408,10 @@ export class ChatTab {
   private async rewind(index: number): Promise<void> {
     const target = this.turns[index];
     if (!target || !this.session) return;
+    this.generation++;
     this.stop();
-    if (this.turn) await this.turn;
+    if (this.turn) await this.turn.catch(() => {});
+    this.stopLiveCharts();
     this.post({ type: "clear" });
     if (!target.before) {
       await this.start();
@@ -606,8 +636,7 @@ export class ChatTab {
     if (this.disposed) return;
     this.resolveAllPermissions();
     for (const finish of [...this.pendingFigures.values()]) finish({ ok: false, error: "the tab was closed" });
-    for (const timer of this.liveCharts.values()) clearInterval(timer);
-    this.liveCharts.clear();
+    this.stopLiveCharts();
     this.silence();
     this.disposed = true;
     this.session?.dispose();

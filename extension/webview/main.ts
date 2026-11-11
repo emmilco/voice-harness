@@ -305,7 +305,9 @@ class TabView {
         this.permissionCards.set(m.requestId, card);
         this.append(card);
         this.scrollToEnd(true);
-        if (this.id === activeId) (row.querySelector("button.allow") as HTMLButtonElement | null)?.focus();
+        // Take focus only if nothing has it: a keystroke meant for the message box must never approve a tool.
+        const focusFree = document.activeElement === null || document.activeElement === document.body;
+        if (this.id === activeId && focusFree) (row.querySelector("button.allow") as HTMLButtonElement | null)?.focus();
         break;
       }
       case "permissionDone": {
@@ -437,6 +439,8 @@ class TabView {
           autosize();
           input.focus();
           input.setSelectionRange(input.value.length, input.value.length);
+        } else {
+          this.draft = m.text;
         }
         break;
       case "notice":
@@ -470,6 +474,7 @@ function activeView(): TabView | undefined {
 
 function renderTabs(tabs: TabSummary[]): void {
   tabList.replaceChildren();
+  tabList.dataset.count = String(tabs.length);
   for (const t of tabs) {
     const tab = document.createElement("div");
     tab.className = "tab" + (t.id === activeId ? " active" : "") + (t.busy ? " busy" : "");
