@@ -245,6 +245,9 @@ export class HarnessPanel implements vscode.Disposable, TabServices {
 
   speak(tab: ChatTab, sentences: string[], ref?: string): void {
     if (!this.isActive(tab) || !this.voice || !this.speakReplies || !sentences.length) return;
+    // While the voice process loads it does not read commands; sentences sent now would all
+    // play when it comes up, out of step with the highlights already applied.
+    if (this.voiceState === "loading" || this.voiceState === "unavailable") return;
     if (this.held) {
       this.held.push(() => this.speak(tab, sentences, ref));
       return;
@@ -268,13 +271,21 @@ export class HarnessPanel implements vscode.Disposable, TabServices {
     if (current?.ref) this.post({ type: "nowSpeaking", tabId: current.tabId, ref: current.ref });
   }
 
-  /** Stops all speech and forgets what was queued. */
+  /** Stops all speech and forgets what was queued. Editor effects waiting on speech still apply. */
   private stopVoiceOutput(): void {
     this.voice?.stopSpeaking();
+    const effects = [...this.pendingMarks.values()];
     this.pendingMarks.clear();
+    for (const effect of effects) effect();
     this.speechPending = false;
     this.spoken = [];
     this.updateNowSpeaking();
+  }
+
+  /** Stops speech and drops its editor effects too (a turn is being replaced). */
+  private dropVoiceOutput(): void {
+    this.pendingMarks.clear();
+    this.stopVoiceOutput();
   }
 
   /** Replays speech and editor effects held during a recording that was discarded. */
@@ -309,7 +320,7 @@ export class HarnessPanel implements vscode.Disposable, TabServices {
     if (!this.isActive(tab)) return;
     this.awaitingReply = false;
     this.held = null;
-    this.stopVoiceOutput();
+    this.dropVoiceOutput();
   }
 
   turnFinished(tab: ChatTab): void {
@@ -339,7 +350,7 @@ export class HarnessPanel implements vscode.Disposable, TabServices {
     const previous = this.active;
     if (previous && previous.id !== id) {
       this.held = null;
-      this.stopVoiceOutput();
+      this.dropVoiceOutput();
       this.awaitingReply = false;
       if (this.autoTurn.running || this.voiceState === "listening" || this.voiceState === "warming") this.cancelListening();
     }
@@ -368,6 +379,8 @@ export class HarnessPanel implements vscode.Disposable, TabServices {
       return;
     }
     if (!tab.busy) {
+      // Silencing a finished reply is not an invitation to speak: no auto-listen afterwards.
+      this.awaitingReply = false;
       this.stopVoiceOutput();
       return;
     }
@@ -438,7 +451,10 @@ export class HarnessPanel implements vscode.Disposable, TabServices {
         break;
       case "toggleSpeak":
         this.speakReplies = !this.speakReplies;
-        if (!this.speakReplies) this.stopVoiceOutput();
+        if (!this.speakReplies) {
+          this.awaitingReply = false;
+          this.stopVoiceOutput();
+        }
         this.postVoice();
         break;
       case "listFiles":
@@ -485,7 +501,10 @@ export class HarnessPanel implements vscode.Disposable, TabServices {
 
   private async listSessions(): Promise<void> {
     const agent = this.active?.agent ?? [...this.tabs.values()].find((t) => t.agent)?.agent;
-    if (!agent) return;
+    if (!agent) {
+      this.postPanel({ type: "notice", text: "No session is running yet, so there is nothing to list from. Try again once a conversation is ready." });
+      return;
+    }
     try {
       const openIn = new Map([...this.tabs.values()].filter((t) => t.sessionId).map((t) => [t.sessionId!, t.id]));
       const items = (await agent.list()).map((s) => ({
@@ -693,8 +712,11 @@ export class HarnessPanel implements vscode.Disposable, TabServices {
       this.voice.listenStop();
       return;
     }
+    if (this.voiceState === "warming") {
+      this.postPanel({ type: "notice", text: "The mic is still starting; try again in a moment." });
+      return;
+    }
     this.awaitingReply = false;
-    if (this.voiceState === "warming") return;
     // Hold the reply while the user speaks: dropped if they send, resumed if they discard.
     this.stopVoiceOutput();
     this.held = [];

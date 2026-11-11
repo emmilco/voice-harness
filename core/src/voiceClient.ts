@@ -67,6 +67,7 @@ export class VoiceClient {
     const client = new VoiceClient(child);
     child.stdin?.on("error", () => {});
     createInterface({ input: child.stdout! }).on("line", (line) => {
+      if (client.disposed) return;
       if (!line.startsWith('{"event"')) {
         if (line.trim()) opts.onEvent({ event: "log", message: line });
         return;

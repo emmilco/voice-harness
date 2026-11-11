@@ -105,6 +105,19 @@ class TabView {
   private readonly tools = new ToolCards(md, openDiff);
   private readonly permissionCards = new Map<string, HTMLElement>();
   private readonly liveCharts = new Map<string, LiveUpdater>();
+  /** Chart views rendered while this tab was hidden measure zero width; they re-measure when shown. */
+  private readonly chartViews: { resize: () => void }[] = [];
+  private scrollTop = 0;
+
+  /** Called when the tab becomes visible: restore scroll, re-measure charts. */
+  shown(): void {
+    this.log.scrollTop = this.scrollTop;
+    for (const v of this.chartViews) v.resize();
+  }
+
+  hidden(): void {
+    this.scrollTop = this.log.scrollTop;
+  }
   private readonly queuedBubbles = new Map<string, HTMLElement>();
   /** Rows that arrived before their chart finished rendering. */
   private readonly earlyRows = new Map<string, Record<string, unknown>[]>();
@@ -198,7 +211,9 @@ class TabView {
   }
 
   endAgentMessage(): void {
-    if (this.agentBubble) this.renderAgent();
+    // One full render at the end: the incremental split can mis-nest loose lists and lose
+    // reference-link definitions, and a single whole-text render puts that right.
+    if (this.agentBubble) this.agentBubble.innerHTML = md.render(this.agentText);
     this.agentBubble = null;
     this.agentText = "";
     this.agentSegment = "";
@@ -349,6 +364,7 @@ class TabView {
         this.append(block);
         renderFigure(canvas, m.kind, m.content).then(
           (update) => {
+            if (update) this.chartViews.push(update);
             if (m.live && update) {
               this.liveCharts.set(m.id, update);
               const pending = this.earlyRows.get(m.id);
@@ -425,6 +441,7 @@ class TabView {
         this.permissionCards.clear();
         this.liveCharts.clear();
         this.earlyRows.clear();
+        this.chartViews.length = 0;
         this.queuedBubbles.clear();
         this.spokenRefs.clear();
         this.speakingEl = undefined;
@@ -481,7 +498,7 @@ function renderTabs(tabs: TabSummary[]): void {
     tab.title = t.label;
     tab.setAttribute("role", "tab");
     tab.setAttribute("aria-selected", String(t.id === activeId));
-    tab.tabIndex = t.id === activeId ? 0 : -1;
+    tab.tabIndex = 0;
     tab.dataset.id = t.id;
     const label = div("tab-label");
     if (t.needsApproval) label.appendChild(div("tab-mark attention", "!"));
@@ -507,10 +524,9 @@ function renderTabs(tabs: TabSummary[]): void {
         e.preventDefault();
         if (t.id !== activeId) vscode.postMessage({ type: "switchTab", id: t.id });
       } else if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
+        // Arrows move focus only; Enter or Space switches, since a switch discards a recording.
         e.preventDefault();
-        const next = all[(i + (e.key === "ArrowRight" ? 1 : -1) + all.length) % all.length];
-        next.focus();
-        vscode.postMessage({ type: "switchTab", id: next.dataset.id! });
+        all[(i + (e.key === "ArrowRight" ? 1 : -1) + all.length) % all.length].focus();
       }
     });
     tabList.appendChild(tab);
@@ -592,6 +608,7 @@ function showTab(id: string): void {
   if (previous) {
     previous.draft = input.value;
     previous.draftImages = pendingImages.splice(0);
+    previous.hidden();
   }
   const next = view(id);
   input.value = next.draft;
@@ -603,7 +620,7 @@ function showTab(id: string): void {
   view(id).log.hidden = false;
   sessionMenu.hidden = true;
   renderActiveHeader();
-  activeView()?.scrollToEnd();
+  next.shown();
 }
 
 // MARK: Message box: completion, images, history
@@ -827,8 +844,10 @@ function applyPanel(m: PanelMessage): void {
       voiceChip.className = `voice ${m.state}`;
       micTitle = m.detail?.startsWith("mic: ") ? m.detail : "";
       const shownDetail = m.detail && !m.detail.startsWith("mic: ") ? `: ${m.detail}` : "";
+      const idleWithProblem = m.state === "idle" && !m.microphone && m.detail;
       voiceChip.textContent =
-        (m.state === "listening" && m.autoListening ? "Listening for your reply. Pause to send." : (VOICE_LABELS[m.state] ?? m.state)) + (VOICE_LABELS[m.state] === "" ? "" : shownDetail);
+        (m.state === "listening" && m.autoListening ? "Listening for your reply. Pause to send." : (VOICE_LABELS[m.state] ?? m.state)) +
+        (idleWithProblem ? `Speech only: ${m.detail}` : VOICE_LABELS[m.state] === "" ? "" : shownDetail);
       if (m.state !== "listening" && m.state !== "interrupted") talkButton.style.setProperty("--level", "0");
       voiceUnavailableReason = m.state === "unavailable" ? (m.detail ?? "the voice process stopped") : m.state === "loading" ? "voice is still loading" : "";
       if (m.state === "unavailable") {

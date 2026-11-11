@@ -17,8 +17,8 @@ let mermaidReady = false;
 new MutationObserver(() => (mermaidReady = false)).observe(document.body, { attributes: true, attributeFilter: ["class"] });
 let mermaidCount = 0;
 
-/** For a live chart: replaces the rows of its "live" dataset. */
-export type LiveUpdater = (rows: Record<string, unknown>[]) => Promise<void>;
+/** For a Vega-Lite chart: replaces the rows of its "live" dataset, and re-measures the view. */
+export type LiveUpdater = ((rows: Record<string, unknown>[]) => Promise<void>) & { resize: () => void };
 
 /**
  * Renders one figure into `target`. Throws with a readable message when the
@@ -51,9 +51,10 @@ export async function renderFigure(target: HTMLElement, kind: FigureKind, conten
         theme: dark() ? "dark" : undefined,
         config: { background: "transparent" },
       });
-      return async (rows) => {
+      const update = async (rows: Record<string, unknown>[]) => {
         await embedded.view.data("live", rows).runAsync();
       };
+      return Object.assign(update, { resize: () => void embedded.view.resize().runAsync() });
     }
     case "mermaid": {
       if (!mermaidReady) {

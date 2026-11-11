@@ -118,7 +118,7 @@ actor Controller {
         mode = .listening
         resetVad()
         _ = audio.takeStats()
-        transcription = beginTranscription(source: "user", preroll: false)
+        transcription = beginTranscription(source: "user", preroll: true)
         Events.emit("listening")
     }
 
