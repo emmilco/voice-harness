@@ -124,3 +124,9 @@ Hypothesis: answers look loosely letter-spaced because the panel forced -webkit-
 Tried: removed the smoothing override; answer size set to the interface size + 1px (whole pixel); font unchanged (ui-serif / New York, Iowan Old Style fallback).
 Outcome: Elliot reports the spacing is still not right.
 Learning: rendering hypothesis not supported (n=1 visual judgement). Remaining candidate: the serif faces themselves at ~14px (Charter, then New York/Iowan; New York's small optical size is deliberately looser). Next: Georgia first, as Elliot asked.
+
+## Attempt 22 — 2026-11-10 19:20:00
+Hypothesis: a different serif face (Georgia) would fix the loose look of the answer text.
+Tried: Georgia first, Iowan Old Style fallback; rendering and size unchanged from attempt 21.
+Outcome: Elliot: "still doesn't feel right" and doubts serif is right at all.
+Learning: four serifs (Charter, New York, Iowan, Georgia) plus the rendering fix all failed the same way. Serif at ~14 px in a narrow panel is the problem, not any one face. Closed: default back to the interface sans (the layout changes stay); serif remains available via voiceHarness.readingFont for a later look at larger sizes.

@@ -695,7 +695,7 @@ export class HarnessPanel implements vscode.Disposable, TabServices {
   }
 
   private postReadingFont(): void {
-    const font = vscode.workspace.getConfiguration("voiceHarness").get<string>("readingFont", "serif") === "sans" ? "sans" : "serif";
+    const font = vscode.workspace.getConfiguration("voiceHarness").get<string>("readingFont", "sans") === "serif" ? "serif" : "sans";
     this.postPanel({ type: "reading", font });
   }
 

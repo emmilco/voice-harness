@@ -108,9 +108,9 @@
             "serif",
             "sans"
           ],
-          "default": "serif",
+          "default": "sans",
           "enumDescriptions": [
-            "Claude's answers in a reading serif (New York where available, otherwise Iowan Old Style or Georgia)",
+            "Claude's answers in a reading serif (Georgia, otherwise Iowan Old Style)",
             "Claude's answers in the editor's interface font"
           ],
           "description": "Typeface for Claude's answers. The interface, code and your own messages always use VS Code's fonts."
