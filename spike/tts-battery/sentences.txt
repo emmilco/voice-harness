@@ -1,0 +1,5 @@
+Here we see the raw attention scores: every query dotted with every key.
+This is the division by the square root of d_k, so the softmax doesn't saturate as the model gets wider.
+Notice these two lines. They reshape the logits from B by T by V into B times T rows before the cross-entropy.
+The function loss_fn in tiny_gpt.py calls F.cross_entropy on logits.view(B * T, V).
+Want me to show the plot, or keep going to the mask?

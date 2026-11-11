@@ -1,0 +1,130 @@
+{
+  "categories" : [
+    {
+      "category" : "sentences",
+      "macro_cer" : null,
+      "macro_wer" : null,
+      "phrase_count" : 5,
+      "rtfx" : 59.653511093112471,
+      "synth_ms_p50" : 94.691038131713867,
+      "synth_ms_p95" : 163.49601745605469
+    }
+  ],
+  "phrases" : [
+    {
+      "asr_ms" : 0,
+      "audio_ms" : 6105.6009070294785,
+      "category" : "sentences",
+      "cer" : null,
+      "hypothesis" : "",
+      "index" : 1,
+      "reference" : "Here we see the raw attention scores: every query dotted with every key.",
+      "rtfx" : 69.596171090377183,
+      "speed" : 1.0499999523162842,
+      "stage_ms" : {
+
+      },
+      "synth_ms" : 87.728977203369141,
+      "total_steps" : 8,
+      "ttft_ms" : 87.728977203369141,
+      "wav_path" : "\/Users\/elliotmilco\/Documents\/GitHub\/voice-harness\/spike\/tts-battery\/out\/supertonic3-M1\/phrase_001.wav",
+      "wer" : null
+    },
+    {
+      "asr_ms" : 0,
+      "audio_ms" : 7064.4897959183672,
+      "category" : "sentences",
+      "cer" : null,
+      "hypothesis" : "",
+      "index" : 2,
+      "reference" : "This is the division by the square root of d_k, so the softmax doesn't saturate as the model gets wider.",
+      "rtfx" : 74.605685345763803,
+      "speed" : 1.0499999523162842,
+      "stage_ms" : {
+
+      },
+      "synth_ms" : 94.691038131713867,
+      "total_steps" : 8,
+      "ttft_ms" : 94.691038131713867,
+      "wav_path" : "\/Users\/elliotmilco\/Documents\/GitHub\/voice-harness\/spike\/tts-battery\/out\/supertonic3-M1\/phrase_002.wav",
+      "wer" : null
+    },
+    {
+      "asr_ms" : 0,
+      "audio_ms" : 8415.6235827664404,
+      "category" : "sentences",
+      "cer" : null,
+      "hypothesis" : "",
+      "index" : 3,
+      "reference" : "Notice these two lines. They reshape the logits from B by T by V into B times T rows before the cross-entropy.",
+      "rtfx" : 54.688462387504202,
+      "speed" : 1.0499999523162842,
+      "stage_ms" : {
+
+      },
+      "synth_ms" : 153.88298034667969,
+      "total_steps" : 8,
+      "ttft_ms" : 153.88298034667969,
+      "wav_path" : "\/Users\/elliotmilco\/Documents\/GitHub\/voice-harness\/spike\/tts-battery\/out\/supertonic3-M1\/phrase_003.wav",
+      "wer" : null
+    },
+    {
+      "asr_ms" : 0,
+      "audio_ms" : 7851.0657596371884,
+      "category" : "sentences",
+      "cer" : null,
+      "hypothesis" : "",
+      "index" : 4,
+      "reference" : "The function loss_fn in tiny_gpt.py calls F.cross_entropy on logits.view(B * T, V).",
+      "rtfx" : 48.019920495907115,
+      "speed" : 1.0499999523162842,
+      "stage_ms" : {
+
+      },
+      "synth_ms" : 163.49601745605469,
+      "total_steps" : 8,
+      "ttft_ms" : 163.49601745605469,
+      "wav_path" : "\/Users\/elliotmilco\/Documents\/GitHub\/voice-harness\/spike\/tts-battery\/out\/supertonic3-M1\/phrase_004.wav",
+      "wer" : null
+    },
+    {
+      "asr_ms" : 0,
+      "audio_ms" : 3266.3492063492067,
+      "category" : "sentences",
+      "cer" : null,
+      "hypothesis" : "",
+      "index" : 5,
+      "reference" : "Want me to show the plot, or keep going to the mask?",
+      "rtfx" : 67.460073376471328,
+      "speed" : 1.0499999523162842,
+      "stage_ms" : {
+
+      },
+      "synth_ms" : 48.418998718261719,
+      "total_steps" : 8,
+      "ttft_ms" : 48.418998718261719,
+      "wav_path" : "\/Users\/elliotmilco\/Documents\/GitHub\/voice-harness\/spike\/tts-battery\/out\/supertonic3-M1\/phrase_005.wav",
+      "wer" : null
+    }
+  ],
+  "summary" : {
+    "agg_rtfx" : 59.653511093112471,
+    "asr_backend" : "skip",
+    "asr_skipped" : true,
+    "backend" : "supertonic3",
+    "cold_start_s" : 17.091825008392334,
+    "compute_units" : "default",
+    "corpus" : "sentences.txt",
+    "first_synth_ms" : 2774.293065071106,
+    "language" : "en",
+    "peak_rss_mb" : 176.9375,
+    "phrase_count" : 5,
+    "speed" : 1.0499999523162842,
+    "total_steps" : 8,
+    "ttft_ms_p50" : 94.691038131713867,
+    "ttft_ms_p95" : 163.49601745605469,
+    "voice_style" : "supertonic_M1",
+    "warm_synth_ms_p50" : 94.691038131713867,
+    "warm_synth_ms_p95" : 163.49601745605469
+  }
+}

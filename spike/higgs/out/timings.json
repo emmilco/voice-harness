@@ -1,0 +1,45 @@
+{
+  "load_s": 181.17,
+  "sentences": [
+    {
+      "n": 1,
+      "chars": 72,
+      "render_s": 37.34,
+      "audio_s": 5.24,
+      "rtf": 7.13,
+      "steps": 138
+    },
+    {
+      "n": 2,
+      "chars": 104,
+      "render_s": 17.43,
+      "audio_s": 6.76,
+      "rtf": 2.58,
+      "steps": 176
+    },
+    {
+      "n": 3,
+      "chars": 110,
+      "render_s": 19.86,
+      "audio_s": 8.84,
+      "rtf": 2.25,
+      "steps": 228
+    },
+    {
+      "n": 4,
+      "chars": 83,
+      "render_s": 16.04,
+      "audio_s": 7.76,
+      "rtf": 2.07,
+      "steps": 201
+    },
+    {
+      "n": 5,
+      "chars": 52,
+      "render_s": 4.57,
+      "audio_s": 2.64,
+      "rtf": 1.73,
+      "steps": 73
+    }
+  ]
+}

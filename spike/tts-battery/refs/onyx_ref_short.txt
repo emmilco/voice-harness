@@ -1,0 +1,1 @@
+Attention lets each word look at the others. We will build it line by line.

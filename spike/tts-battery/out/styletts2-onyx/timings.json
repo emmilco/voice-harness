@@ -1,0 +1,119 @@
+{
+  "categories" : [
+    {
+      "category" : "sentences",
+      "macro_cer" : null,
+      "macro_wer" : null,
+      "phrase_count" : 5,
+      "rtfx" : 0.68793888894932897,
+      "synth_ms_p50" : 12908.413052558899,
+      "synth_ms_p95" : 14288.058996200562
+    }
+  ],
+  "phrases" : [
+    {
+      "asr_ms" : 0,
+      "audio_ms" : 4847.9166666666661,
+      "category" : "sentences",
+      "cer" : null,
+      "hypothesis" : "",
+      "index" : 1,
+      "reference" : "Here we see the raw attention scores: every query dotted with every key.",
+      "rtfx" : 0.33929847769776217,
+      "stage_ms" : {
+
+      },
+      "synth_ms" : 14288.058996200562,
+      "ttft_ms" : 14288.058996200562,
+      "wav_path" : "\/Users\/elliotmilco\/Documents\/GitHub\/voice-harness\/spike\/tts-battery\/out\/styletts2-onyx\/phrase_001.wav",
+      "wer" : null
+    },
+    {
+      "asr_ms" : 0,
+      "audio_ms" : 7172.916666666667,
+      "category" : "sentences",
+      "cer" : null,
+      "hypothesis" : "",
+      "index" : 2,
+      "reference" : "This is the division by the square root of d_k, so the softmax doesn't saturate as the model gets wider.",
+      "rtfx" : 2.1260740167021419,
+      "stage_ms" : {
+
+      },
+      "synth_ms" : 3373.7850189208984,
+      "ttft_ms" : 3373.7850189208984,
+      "wav_path" : "\/Users\/elliotmilco\/Documents\/GitHub\/voice-harness\/spike\/tts-battery\/out\/styletts2-onyx\/phrase_002.wav",
+      "wer" : null
+    },
+    {
+      "asr_ms" : 0,
+      "audio_ms" : 7097.9166666666661,
+      "category" : "sentences",
+      "cer" : null,
+      "hypothesis" : "",
+      "index" : 3,
+      "reference" : "Notice these two lines. They reshape the logits from B by T by V into B times T rows before the cross-entropy.",
+      "rtfx" : 2.1465393660411158,
+      "stage_ms" : {
+
+      },
+      "synth_ms" : 3306.6790103912354,
+      "ttft_ms" : 3306.6790103912354,
+      "wav_path" : "\/Users\/elliotmilco\/Documents\/GitHub\/voice-harness\/spike\/tts-battery\/out\/styletts2-onyx\/phrase_003.wav",
+      "wer" : null
+    },
+    {
+      "asr_ms" : 0,
+      "audio_ms" : 10172.916666666668,
+      "category" : "sentences",
+      "cer" : null,
+      "hypothesis" : "",
+      "index" : 4,
+      "reference" : "The function loss_fn in tiny_gpt.py calls F.cross_entropy on logits.view(B * T, V).",
+      "rtfx" : 0.71893505274427372,
+      "stage_ms" : {
+
+      },
+      "synth_ms" : 14149.980068206787,
+      "ttft_ms" : 14149.980068206787,
+      "wav_path" : "\/Users\/elliotmilco\/Documents\/GitHub\/voice-harness\/spike\/tts-battery\/out\/styletts2-onyx\/phrase_004.wav",
+      "wer" : null
+    },
+    {
+      "asr_ms" : 0,
+      "audio_ms" : 3747.916666666667,
+      "category" : "sentences",
+      "cer" : null,
+      "hypothesis" : "",
+      "index" : 5,
+      "reference" : "Want me to show the plot, or keep going to the mask?",
+      "rtfx" : 0.29034681888519975,
+      "stage_ms" : {
+
+      },
+      "synth_ms" : 12908.413052558899,
+      "ttft_ms" : 12908.413052558899,
+      "wav_path" : "\/Users\/elliotmilco\/Documents\/GitHub\/voice-harness\/spike\/tts-battery\/out\/styletts2-onyx\/phrase_005.wav",
+      "wer" : null
+    }
+  ],
+  "summary" : {
+    "agg_rtfx" : 0.68793888894932897,
+    "alpha" : 0.30000001192092896,
+    "asr_backend" : "skip",
+    "asr_skipped" : true,
+    "backend" : "styletts2",
+    "beta" : 0.69999998807907104,
+    "cold_start_s" : 1.9363030195236206,
+    "compute_units" : "default",
+    "corpus" : "sentences.txt",
+    "first_synth_ms" : 3058.1909418106079,
+    "peak_rss_mb" : 4640.203125,
+    "phrase_count" : 5,
+    "reference" : "\/Users\/elliotmilco\/Documents\/GitHub\/voice-harness\/spike\/tts-battery\/refs\/onyx_ref_2875ms.wav",
+    "ttft_ms_p50" : 12908.413052558899,
+    "ttft_ms_p95" : 14288.058996200562,
+    "warm_synth_ms_p50" : 12908.413052558899,
+    "warm_synth_ms_p95" : 14288.058996200562
+  }
+}

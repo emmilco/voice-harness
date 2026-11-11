@@ -1,0 +1,1 @@
+Attention is the part of the model that lets each word look at the others. In this section we will build it one line at a time, and I will stop whenever something is worth a closer look.
