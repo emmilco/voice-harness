@@ -27,9 +27,10 @@ body.look-harness {
   --vh-line: rgba(38, 33, 28, 0.13);
   --vh-rule: rgba(38, 33, 28, 0.3);
   --vh-accent: #b9603a;
+  --vh-accent-ink: #9c4a26;  /* the accent as text: 5.5:1 on the page (the fill colour is 3.9:1) */
   --vh-accent-soft: rgba(185, 96, 58, 0.13);
   --vh-accent-text: #ffffff;
-  --vh-attention: #b9603a;
+  --vh-attention: #9c4a26;
   --vh-ok: #b9603a;
   --vh-error: #b4463a;
   --vh-link: #9a4f2a;
@@ -65,6 +66,7 @@ body.look-harness.page-dark {
   --vh-line: rgba(236, 230, 217, 0.13);
   --vh-rule: rgba(236, 230, 217, 0.22);
   --vh-accent: #d98a5b;
+  --vh-accent-ink: #d98a5b;
   --vh-accent-soft: rgba(217, 138, 91, 0.16);
   --vh-accent-text: #1f1510;
   --vh-attention: #d98a5b;
@@ -140,8 +142,8 @@ body.look-harness .message.agent.speaking::before {
 body.look-harness .message.step { border-left: 1px solid var(--vh-rule); padding-left: 14px; }
 body.look-harness .message.step.speaking { border-left: 2px solid var(--vh-accent); padding-left: 13px; }
 body.look-harness .step-ref { font-family: var(--vh-sans); font-size: var(--vh-size-small); color: var(--vh-quiet); margin-bottom: 4px; }
-body.look-harness .step-ref:hover { color: var(--vh-accent); text-decoration: none; }
-body.look-harness .message.step.speaking .step-ref { color: var(--vh-accent); }
+body.look-harness .step-ref:hover { color: var(--vh-accent-ink); text-decoration: none; }
+body.look-harness .message.step.speaking .step-ref { color: var(--vh-accent-ink); }
 
 /* The user's words: sans, set in from the right, no bubble. A rule above marks the turn. */
 body.look-harness .message.user {
@@ -176,7 +178,7 @@ body.look-harness .tool-head.expandable:hover { background: var(--vh-tint); }
 body.look-harness .tool-icon { opacity: 0.6; }
 body.look-harness .tool-title { flex: 0 1 auto; font-size: var(--vh-size-small); }
 body.look-harness .tool-status { margin-left: 2px; }
-body.look-harness .tool-status.running { color: var(--vh-accent); }
+body.look-harness .tool-status.running { color: var(--vh-accent-ink); }
 body.look-harness .tool-body { background: var(--vh-code-bg); border: 1px solid var(--vh-line); border-radius: 3px; font-size: var(--vh-size-small); }
 
 /* Approvals: a rule, like the speaking passage, because it also asks for the reader's attention. */
@@ -194,8 +196,8 @@ body.look-harness .allow:hover:not(:disabled) { filter: brightness(1.08); }
 body.look-harness .composer { padding: 12px var(--vh-pad) 16px; border-top: 1px solid var(--vh-line); background: var(--vh-page); }
 body.look-harness .statusline { font-size: var(--vh-size-small); margin-bottom: 8px; }
 body.look-harness .status.busy { color: var(--vh-text); }
-body.look-harness .status.approval { color: var(--vh-accent); }
-body.look-harness .voice.listening, body.look-harness .voice.speaking { color: var(--vh-accent); }
+body.look-harness .status.approval { color: var(--vh-accent-ink); }
+body.look-harness .voice.listening, body.look-harness .voice.speaking { color: var(--vh-accent-ink); }
 
 body.look-harness textarea {
   font-family: var(--vh-sans); font-size: 14px; line-height: 1.45;
@@ -261,7 +263,7 @@ body.look-harness.page-dark .hljs-deletion { color: #d9756a; }
 body.look-harness .hljs-keyword, body.look-harness .hljs-selector-tag, body.look-harness .hljs-literal, body.look-harness .hljs-built_in { color: #2f5a93; }
 body.look-harness .hljs-string, body.look-harness .hljs-attr-value, body.look-harness .hljs-template-string, body.look-harness .hljs-addition { color: #9a5a14; }
 body.look-harness .hljs-number, body.look-harness .hljs-symbol { color: #4a7035; }
-body.look-harness .hljs-comment, body.look-harness .hljs-quote, body.look-harness .hljs-meta { color: #857d72; }
+body.look-harness .hljs-comment, body.look-harness .hljs-quote, body.look-harness .hljs-meta { color: #6f685e; }
 body.look-harness .hljs-title, body.look-harness .hljs-title.function_, body.look-harness .hljs-section { color: #7a5c10; }
-body.look-harness .hljs-title.class_, body.look-harness .hljs-type { color: #b9603a; }
+body.look-harness .hljs-title.class_, body.look-harness .hljs-type { color: #9c4a26; }
 body.look-harness .hljs-variable, body.look-harness .hljs-params, body.look-harness .hljs-attr, body.look-harness .hljs-property { color: #3f3a33; }

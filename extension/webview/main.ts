@@ -793,7 +793,7 @@ function updateControls(): void {
   const stopLabel = listening ? "Discard this recording" : busy ? "Stop Claude" : "Stop speaking";
   stopButton.title = `${stopLabel} (Ctrl+Shift+Backspace)`;
   stopButton.setAttribute("aria-label", stopLabel);
-  input.disabled = !ready;
+  input.disabled = !v || v.state === "error" || v.state === "stopped";
   talkButton.disabled = !ready || !voiceUsable;
   talkButton.classList.toggle("listening", listening);
   talkButton.classList.toggle("speaking", speaking);

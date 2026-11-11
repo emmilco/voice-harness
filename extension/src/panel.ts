@@ -288,14 +288,14 @@ export class HarnessPanel implements vscode.Disposable, TabServices {
     this.stopVoiceOutput();
   }
 
-  /** Replays speech and editor effects held during a recording that was discarded. */
+  /** Resumes the paused reply and replays what was held during a recording that was discarded. */
   private releaseHeld(): void {
     const held = this.held;
     this.held = null;
-    if (held?.length) {
-      this.postPanel({ type: "notice", text: "Recording discarded; Claude's reply continues aloud." });
-      for (const action of held) action();
-    }
+    if (held === null) return;
+    this.voice?.resumeSpeaking();
+    if (this.spoken.length || held.length) this.postPanel({ type: "notice", text: "Recording discarded; Claude's reply continues aloud." });
+    for (const action of held) action();
   }
 
   /**
@@ -640,6 +640,7 @@ export class HarnessPanel implements vscode.Disposable, TabServices {
         this.postPanel({ type: "partial", text: "", source: null });
         if (e.text) {
           this.held = null;
+          this.stopVoiceOutput();
           void this.active?.send(e.text, true);
         } else {
           this.postPanel({ type: "notice", text: "Didn't catch anything." });
@@ -717,8 +718,8 @@ export class HarnessPanel implements vscode.Disposable, TabServices {
       return;
     }
     this.awaitingReply = false;
-    // Hold the reply while the user speaks: dropped if they send, resumed if they discard.
-    this.stopVoiceOutput();
+    // Hold the reply while the user speaks: the voice process pauses playback, new sentences
+    // wait in `held`. Sending drops both; discarding resumes playback and replays the held.
     this.held = [];
     this.voice.listenStart();
   }

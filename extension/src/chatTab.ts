@@ -264,7 +264,7 @@ export class ChatTab {
               else this.endSegment();
             }
             if (this.replaying) return;
-            if (t.locations.length && (t.kind === "read" || t.kind === "edit") && this.services.isActive(this)) {
+            if (!isUpdate && t.locations.length && (t.kind === "read" || t.kind === "edit") && this.services.isActive(this)) {
               void this.services.editor.follow(t.locations);
             }
           },

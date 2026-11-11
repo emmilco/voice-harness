@@ -40,7 +40,7 @@ export class EditorControl implements vscode.Disposable {
   async follow(locations: Location[]): Promise<void> {
     const loc = locations.find((l) => l.path.startsWith(this.workspaceRoot));
     if (!loc) return;
-    const editor = await this.open(loc.path);
+    const editor = await this.open(loc.path, true);
     const line = Math.min(Math.max((loc.line ?? 1) - 1, 0), editor.document.lineCount - 1);
     const r = new vscode.Range(line, 0, line, 0);
     for (const e of vscode.window.visibleTextEditors) e.setDecorations(this.followed, []);
@@ -48,9 +48,10 @@ export class EditorControl implements vscode.Disposable {
     editor.revealRange(r, vscode.TextEditorRevealType.InCenterIfOutsideViewport);
   }
 
-  private async open(file: string): Promise<vscode.TextEditor> {
+  /** `preview` editors are replaced by the next preview, so following Claude's reads does not pile up tabs. */
+  private async open(file: string, preview = false): Promise<vscode.TextEditor> {
     const doc = await vscode.workspace.openTextDocument(vscode.Uri.file(file));
-    return vscode.window.showTextDocument(doc, { viewColumn: vscode.ViewColumn.One, preserveFocus: true, preview: false });
+    return vscode.window.showTextDocument(doc, { viewColumn: vscode.ViewColumn.One, preserveFocus: true, preview });
   }
 
   private clearAll(): void {

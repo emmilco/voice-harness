@@ -99,7 +99,8 @@ actor Controller {
 
     private func startListening() async {
         if mode != .idle { await dropTranscription() }
-        await speaker.stop()
+        // Pause rather than stop: the harness resumes the reply if the recording is discarded.
+        await speaker.pause()
         // After a device change (e.g. AirPods entering headset mode) the microphone can take a
         // few seconds to deliver audio; don't signal "listening" until it does.
         if Date().timeIntervalSince(lastMicAt) > 0.3 {
