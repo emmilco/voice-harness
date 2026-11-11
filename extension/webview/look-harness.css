@@ -34,6 +34,8 @@ body.look-harness {
   --vh-error: #b4463a;
   --vh-link: #9a4f2a;
   --vh-code-bg: #efe9dd;
+  --vh-inline-bg: #fffdf9;
+  --vh-inline-line: rgba(38, 33, 28, 0.18);
   --vh-glow: rgba(185, 96, 58, 0.3);
   --vh-menu: #fffcf6;
   --vh-radius: 4px;
@@ -70,6 +72,8 @@ body.look-harness.page-dark {
   --vh-error: #d9756a;
   --vh-link: #d9b48a;
   --vh-code-bg: #100f0d;
+  --vh-inline-bg: #221f1b;
+  --vh-inline-line: rgba(236, 230, 217, 0.18);
   --vh-glow: rgba(217, 138, 91, 0.4);
   --vh-menu: #1e1b18;
 }
@@ -117,9 +121,14 @@ body.look-harness .message a { color: var(--vh-link); text-decoration: none; }
 body.look-harness .message a:hover { text-decoration: underline; text-underline-offset: 3px; }
 body.look-harness .message strong { font-weight: 700; color: var(--vh-text-strong); }
 body.look-harness .message em { font-style: italic; }
-body.look-harness .message code { font-size: 0.78em; background: var(--vh-tint-strong); border-radius: 3px; padding: 0.1em 0.3em; font-variant-numeric: lining-nums; }
+/* Inline code: ink on a small card with a hairline, sized to read beside the serif. */
+body.look-harness .message code {
+  font-size: 0.86em; color: var(--vh-text-strong);
+  background: var(--vh-inline-bg); border: 1px solid var(--vh-inline-line); border-radius: 3px;
+  padding: 0.04em 0.32em; font-variant-numeric: lining-nums;
+}
 body.look-harness .message pre { background: var(--vh-code-bg); border: 1px solid var(--vh-line); border-radius: 3px; font-size: var(--vh-size-small); line-height: 1.5; font-variant-numeric: lining-nums; }
-body.look-harness .message pre code { background: none; font-size: inherit; }
+body.look-harness .message pre code { background: none; border: none; padding: 0; font-size: inherit; color: inherit; }
 body.look-harness .message h1, body.look-harness .message h2, body.look-harness .message h3 { font-size: inherit; font-weight: 400; font-style: italic; margin: 1.2em 0 0.4em; }
 body.look-harness .message table { font-family: var(--vh-sans); font-size: var(--vh-size-ui); font-variant-numeric: tabular-nums; }
 body.look-harness .message th, body.look-harness .message td { border-bottom-color: var(--vh-line); }
