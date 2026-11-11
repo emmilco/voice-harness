@@ -204,6 +204,7 @@ export class HarnessPanel implements vscode.Disposable, TabServices {
     host.onDidDispose(() => this.dispose());
     this.configWatch = vscode.workspace.onDidChangeConfiguration((e) => {
       if (e.affectsConfiguration("voiceHarness.readingFont")) this.postReadingFont();
+      if (e.affectsConfiguration("voiceHarness.look")) this.postLook();
     });
   }
 
@@ -416,6 +417,7 @@ export class HarnessPanel implements vscode.Disposable, TabServices {
     }
     switch (m.type) {
       case "ready":
+        this.postLook();
         this.postReadingFont();
         this.startVoice();
         if (!this.tabs.size) this.newTab();
@@ -694,6 +696,11 @@ export class HarnessPanel implements vscode.Disposable, TabServices {
     this.voice.listenStart();
   }
 
+  private postLook(): void {
+    const look = vscode.workspace.getConfiguration("voiceHarness").get<string>("look", "harness") === "editor" ? "editor" : "harness";
+    this.postPanel({ type: "look", look });
+  }
+
   private postReadingFont(): void {
     const font = vscode.workspace.getConfiguration("voiceHarness").get<string>("readingFont", "sans") === "serif" ? "serif" : "sans";
     this.postPanel({ type: "reading", font });
@@ -740,6 +747,7 @@ export class HarnessPanel implements vscode.Disposable, TabServices {
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}'; img-src ${webview.cspSource} data:; font-src ${webview.cspSource} data:;">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <link rel="stylesheet" href="${asset("webview.css")}">
+<link rel="stylesheet" href="${asset("look-harness.css")}">
 <title>Voice Harness</title>
 </head>
 <body>

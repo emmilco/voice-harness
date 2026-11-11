@@ -42,7 +42,8 @@ voice-harness/
 │   │   ├── editorTracker.ts # remembers the user's last file editor for editor context
 │   │   ├── protocol.ts      # extension ↔ webview message types
 │   │   └── toolchain.ts     # resolves node / claude via settings or a login shell
-│   └── webview/       # main.ts (chat UI, markdown-it, `onscreen` blocks), figures.ts (Vega-Lite, Mermaid, SVG, images), style.css
+│   ├── webview/       # main.ts (chat UI, markdown-it, `onscreen` blocks), figures.ts (Vega-Lite, Mermaid, SVG, images), style.css (structure + editor-theme look), look-harness.css (the panel's own look)
+│   └── design/        # mock.html (the panel with a sample conversation) and screenshot.sh (headless Chrome → design/out/*.png, gitignored): look at the design before the user does
 ├── voice/             # Swift voice process (SwiftPM; FluidAudio pinned exactly)
 │   └── Sources/VoiceHarnessVoice/
 │       ├── main.swift          # startup: mic permission, Kokoro warm-up, VAD, speech assets, command loop

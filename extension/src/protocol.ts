@@ -89,7 +89,9 @@ export type PanelMessage =
   | { type: "notice"; text: string }
   | { type: "focusInput" }
   /** The typeface for Claude's answers. */
-  | { type: "reading"; font: "serif" | "sans" };
+  | { type: "reading"; font: "serif" | "sans" }
+  /** Which look the panel wears: its own design, or the editor's theme. */
+  | { type: "look"; look: "harness" | "editor" };
 
 export type ToWebview = TabMessage | PanelMessage;
 

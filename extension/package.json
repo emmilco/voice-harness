@@ -114,6 +114,19 @@
             "Claude's answers in the editor's interface font"
           ],
           "description": "Typeface for Claude's answers. The interface, code and your own messages always use VS Code's fonts."
+        },
+        "voiceHarness.look": {
+          "type": "string",
+          "enum": [
+            "harness",
+            "editor"
+          ],
+          "default": "harness",
+          "enumDescriptions": [
+            "The panel's own design: warm ground, Inter, the voice at the centre",
+            "Colours and fonts from the editor's theme"
+          ],
+          "description": "How the panel looks. Applies immediately."
         }
       }
     },

@@ -886,6 +886,9 @@ function applyPanel(m: PanelMessage): void {
     case "reading":
       document.body.classList.toggle("reading-serif", m.font === "serif");
       break;
+    case "look":
+      document.body.classList.toggle("look-harness", m.look === "harness");
+      break;
   }
 }
 

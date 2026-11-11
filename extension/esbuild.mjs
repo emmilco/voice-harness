@@ -34,3 +34,4 @@ await Promise.all([
   }),
 ]);
 copyFileSync("webview/style.css", "dist/webview.css");
+copyFileSync("webview/look-harness.css", "dist/look-harness.css");
