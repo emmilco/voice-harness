@@ -1,9 +1,9 @@
 import AVFAudio
-import FluidAudio
 import Foundation
 
-/// Speaks queued sentences in order: synthesizes each with Kokoro, schedules it
-/// on the speech player, and reports `spoke` as each finishes playing.
+/// Speaks queued sentences in order: synthesizes each with the system voice,
+/// schedules the audio on the speech player as it arrives, and reports `spoke`
+/// as each sentence finishes playing.
 /// Markers queued between sentences report `marked` when playback reaches them.
 /// `speechActive` / `speechIdle` events bracket any stretch of speech.
 actor Speaker {
@@ -12,8 +12,7 @@ actor Speaker {
         case mark(id: Int)
     }
 
-    private let kokoro: KokoroAneManager
-    private let voice: String
+    private let speech: SystemSpeech
     private let audio: AudioIO
     private var queue: [Item] = []
     private var generation = 0
@@ -22,9 +21,8 @@ actor Speaker {
     private var wasActive = false
     private(set) var paused = false
 
-    init(kokoro: KokoroAneManager, voice: String, audio: AudioIO) {
-        self.kokoro = kokoro
-        self.voice = voice
+    init(speech: SystemSpeech, audio: AudioIO) {
+        self.speech = speech
         self.audio = audio
     }
 
@@ -40,13 +38,6 @@ actor Speaker {
         queue.append(.mark(id: id))
         pump()
         reportActivity()
-    }
-
-    /// Synthesizes `text` in `voice` without playing it.
-    func render(text: String, voice: String) async throws -> (samples: [Float], ms: Int) {
-        let started = Date()
-        let result = try await kokoro.synthesizeDetailed(text: text, voice: voice)
-        return (result.samples, Int(Date().timeIntervalSince(started) * 1000))
     }
 
     func stop() {
@@ -110,29 +101,47 @@ actor Speaker {
         reportActivity()
     }
 
+    /// Audio is scheduled in pieces of about this length while a sentence is still being synthesized.
+    private static let pieceLength = Int(AudioIO.speechRate * 0.2)
+
     private func synthesize(_ item: (id: Int, text: String), generation gen: Int) async {
-        do {
-            let started = Date()
-            let result = try await kokoro.synthesizeDetailed(text: item.text, voice: voice)
+        let started = Date()
+        var firstMs: Int?
+        var total = 0
+        var pending: [Float] = []
+        for await samples in speech.stream(item.text) {
+            guard gen == generation else { break }
+            if firstMs == nil { firstMs = Int(Date().timeIntervalSince(started) * 1000) }
+            total += samples.count
+            pending += samples
+            if pending.count >= Speaker.pieceLength {
+                schedule(pending)
+                pending = []
+            }
+        }
+        if gen == generation {
             Events.emit("synthesized", [
                 "id": item.id,
                 "ms": Int(Date().timeIntervalSince(started) * 1000),
-                "audioMs": Int(Double(result.samples.count) / AudioIO.speechRate * 1000),
+                "firstMs": firstMs ?? 0,
+                "audioMs": Int(Double(total) / AudioIO.speechRate * 1000),
             ])
-            if gen == generation, let buffer = audio.makeSpeechBuffer(result.samples) {
+            // The last piece (or a moment of silence, when none is left) carries the end-of-sentence callback.
+            if let buffer = audio.makeSpeechBuffer(pending.isEmpty ? [0] : pending) {
                 outstanding += 1
                 audio.speechPlayer.scheduleBuffer(buffer, completionCallbackType: .dataPlayedBack) { _ in
                     Task { await self.played(id: item.id, generation: gen) }
                 }
             }
-        } catch {
-            Events.emit("error", ["message": "speech synthesis failed: \(error.localizedDescription)", "id": item.id])
-        }
-        if gen == generation {
             synthesizing = false
             pump()
         }
         reportActivity()
+    }
+
+    private func schedule(_ samples: [Float]) {
+        guard let buffer = audio.makeSpeechBuffer(samples) else { return }
+        audio.speechPlayer.scheduleBuffer(buffer, completionHandler: nil)
     }
 
     private func played(id: Int, generation gen: Int) {

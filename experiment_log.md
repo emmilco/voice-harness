@@ -148,3 +148,27 @@ Hypothesis: "too heavy" (Hoefler on the dark page) is the face's stroke weight; 
 Tried: six variants rendered side by side (out/weight.png); Athelas with dimmer text and 155% leading shown to Elliot in dark and light.
 Outcome: Elliot: light page is better, and Hoefler was better than Athelas.
 Learning: the heaviness was dark-mode bloom (light strokes bleeding on ink), not the face. On a cream page Hoefler keeps its substance without turning heavy. The harness look now defaults to a light page whatever the editor theme (voiceHarness.page: light | dark | editor), Hoefler Text 17 px, 150% leading. Closed; rendered and reviewed.
+
+## Attempt 26 — 2026-11-10 23:40:00
+Hypothesis: StyleTTS2 (FluidAudio v0.18.2) accepts a reference clip of any length, as its docs describe ("any sample rate / channel layout").
+Tried: tts-benchmark --backend styletts2 with a 10.55 s am_onyx clip and the 26.4 s narrator clip.
+Outcome: Both failed in ref_encoder: mel shape (1,1,80,845) and (1,1,80,2113) against a model fixed at (1,1,80,231). A clip of exactly 69000 samples at 24 kHz (2.875 s) passed for both voices. A first trim of the 22.05 kHz narrator clip gave 251 frames because the trim ran before the resample.
+Learning: The shipped ref_encoder is fixed at 231 mel frames (hop 300). References must be resampled to 24 kHz first, then cut to exactly 69000 samples. Under 3 s of audio is all the voice the model ever sees.
+
+## Attempt 27 — 2026-11-10 23:44:00
+Hypothesis: LuxTTS takes the same reference clips and full transcripts as the other cloning backends.
+Tried: tts --backend luxtts with the 10.55 s am_onyx clip and the 26.4 s narrator clip, each with its full transcript.
+Outcome: The narrator clip was rejected (inputTooLong: 1.1 mel frames per token). The onyx clip rendered, with a warning that only the first 5.0 s of the prompt conditions the model while the whole transcript sets the duration, so those renders were discarded. Clips of 4.9 s and 5.0 s with matching transcripts rendered for both voices.
+Learning: LuxTTS prompts must be at most 5 s and the transcript must cover exactly that audio. The narrator cut (0.38 s to 5.38 s) ends about 0.15 s before the first sentence does, so its transcript slightly overruns the audio.
+
+## Attempt 28 — 2026-11-11 00:30:00
+Hypothesis: The voice process can synthesize the Siri system voice itself with AVSpeechSynthesizer.write, because a probe script (spike/tts-battery/siri_probe.swift, run with `swift`) received Siri samples that way.
+Tried: Replaced Kokoro in Speaker with an AVSpeechSynthesizer-based synthesizer and ran the built binary headlessly.
+Outcome: The binary spoke in Samantha (compact). The same probe compiled with swiftc reported 180 voices, none Siri, and nil for com.apple.siri.natural.Aaron; run under the `swift` interpreter it reported 188 including Siri. Replicated twice each way.
+Learning: The speech framework lists Siri voices only to Apple-signed processes; a probe under `swift` or `say` does not show what our own binary can do. Side findings from the interpreted probe: stopSpeaking does not cut a write() short, and a second write() on one synthesizer abandons the first without an end marker. Abandoned for /usr/bin/say.
+
+## Attempt 29 — 2026-11-11 00:45:00
+Hypothesis: With speech going through /usr/bin/say, a voice name that is not installed makes say fail, so the process can fall back to the system voice.
+Tried: Started the say-based voice process with --voice am_onyx (the stale Kokoro setting) and rendered battery sentence 1 to a file.
+Outcome: say -v am_onyx exited 0 and produced 4.19 s of audio, the Samantha length; the system Siri voice gives 4.64 s for that sentence. Matching names against `say -v '?'` then refused "Samantha" and "Daniel", which this Mac lists as "Samantha (English (US))" and "Daniel (English (UK))", and the listing differed between two calls minutes apart.
+Learning: say never fails on an unknown voice name; it substitutes a default voice. Named voices were removed: the process never passes -v, so speech is always the system voice. File duration of a fixed sentence is a usable silent check of which voice rendered.

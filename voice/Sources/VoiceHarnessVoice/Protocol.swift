@@ -4,8 +4,7 @@ import Foundation
 ///
 /// - `speak` {id, text}: queue one sentence for speech.
 /// - `mark` {id}: queue a marker; `marked` {id} is emitted when playback reaches it.
-/// - `render` {id, text, voice?, path}: synthesize to a 24 kHz 16-bit WAV file; emits `rendered`.
-/// - `listVoices`: emits `voices` with the English voice names.
+/// - `render` {id, text, path}: synthesize to a 48 kHz 16-bit WAV file; emits `rendered`.
 /// - `cue`: plays the attention chime.
 /// - `stopSpeaking`: drop queued and playing speech.
 /// - `pauseSpeaking` / `resumeSpeaking`: pause or continue playback.
@@ -17,7 +16,6 @@ struct Command: Decodable {
     let cmd: String
     let id: Int?
     let text: String?
-    let voice: String?
     let path: String?
 }
 

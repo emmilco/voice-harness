@@ -1,9 +1,10 @@
-// voice-harness voice process: Kokoro speech out, SpeechAnalyzer speech in,
+// voice-harness voice process: system-voice speech out, SpeechAnalyzer speech in,
 // Silero voice activity detection for interruptions. Commands arrive as JSON
 // lines on stdin; events leave as JSON lines on stdout (see Protocol.swift).
 //
-//   VoiceHarnessVoice --models <dir> [--voice af_heart] [--voice-processing] [--no-mic] [--interruptions]
+//   VoiceHarnessVoice --models <dir> [--voice-processing] [--no-mic] [--interruptions]
 //
+// Speech uses the voice chosen in System Settings → Accessibility → Read & Speak.
 // --interruptions: while speech plays, detect the user starting to talk and pause (barge-in).
 // Without it, speech stops only on an explicit listenStart or stopSpeaking.
 import AVFAudio
@@ -20,7 +21,6 @@ func argument(_ name: String) -> String? {
 
 let modelsDirectory = URL(fileURLWithPath: argument("--models")
     ?? (NSHomeDirectory() + "/Library/Application Support/voice-harness/models"))
-let voice = argument("--voice") ?? "af_heart"
 let voiceProcessing = CommandLine.arguments.contains("--voice-processing")
 let wantMic = !CommandLine.arguments.contains("--no-mic")
 let wantInterruptions = CommandLine.arguments.contains("--interruptions")
@@ -63,14 +63,13 @@ do {
 }
 phase("audio engine start")
 
-let kokoro = KokoroAneManager(directory: modelsDirectory, version: .v3)
-do {
-    try await kokoro.initialize(preloadVoices: [voice])
-} catch {
-    Events.emit("fatal", ["message": "speech synthesis unavailable: \(error.localizedDescription)"])
+let speech = SystemSpeech(sampleRate: AudioIO.speechRate)
+// The first synthesis after launch is the slow one.
+guard await !speech.render("Ready.").isEmpty else {
+    Events.emit("fatal", ["message": "speech synthesis unavailable: /usr/bin/say produced no audio"])
     exit(1)
 }
-phase("kokoro initialize")
+phase("speech voice")
 
 var vad: VadManager?
 if micAvailable {
@@ -82,8 +81,8 @@ if micAvailable {
     phase("voice activity model")
 }
 
-let speaker = Speaker(kokoro: kokoro, voice: voice, audio: audio)
-let controller = Controller(audio: audio, speaker: speaker, vad: vad, locale: locale, defaultVoice: voice,
+let speaker = Speaker(speech: speech, audio: audio)
+let controller = Controller(audio: audio, speaker: speaker, vad: vad, locale: locale,
                             interruptions: wantInterruptions)
 audio.onDeviceChange = { result in
     switch result {
@@ -108,7 +107,6 @@ let stdinReader = Thread {
 stdinReader.start()
 
 Events.emit("ready", [
-    "voice": voice,
     "microphone": micAvailable,
     "interruptions": vad != nil && wantInterruptions,
     "speechDetection": vad != nil,
@@ -117,17 +115,6 @@ Events.emit("ready", [
     "outputDevice": audio.deviceNames.output,
     "startupMs": Int(Date().timeIntervalSince(startedAt) * 1000),
 ])
-
-// The first synthesis of each length is slow. Warm up after `ready`, silently: Kokoro is an
-// actor, so a real sentence arriving meanwhile waits for at most one warm-up step.
-Task {
-    phaseStart = Date()
-    for text in ["Ready.", "This warms up the medium length path for speech synthesis.",
-                 "And this one is a longer sentence, so that the longer synthesis path is also loaded and compiled before we start talking."] {
-        _ = try? await kokoro.synthesizeDetailed(text: text, voice: voice)
-    }
-    phase("background warm-up")
-}
 
 for await line in commandStream {
     guard let data = line.data(using: .utf8), let command = try? JSONDecoder().decode(Command.self, from: data) else {

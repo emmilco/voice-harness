@@ -13,7 +13,7 @@ import Foundation
 /// before the change is lost.
 final class AudioIO {
     static let micRate: Double = 16_000
-    static let speechRate: Double = 24_000
+    static let speechRate: Double = 48_000
 
     let engine = AVAudioEngine()
     let speechPlayer = AVAudioPlayerNode()
@@ -163,7 +163,7 @@ final class AudioIO {
         for frequency in frequencies {
             for i in 0..<noteLength {
                 let t = Double(i) / rate
-                let envelope = min(1.0, Double(i) / 240.0) * min(1.0, Double(noteLength - i) / 600.0)
+                let envelope = min(1.0, Double(i) / (rate * 0.01)) * min(1.0, Double(noteLength - i) / (rate * 0.025))
                 samples.append(Float(sin(2 * .pi * frequency * t) * envelope * 0.25))
             }
         }

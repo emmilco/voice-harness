@@ -46,20 +46,24 @@ voice-harness/
 │   └── design/        # mock.html (the panel with a sample conversation) and screenshot.sh (headless Chrome → design/out/*.png, gitignored): look at the design before the user does
 ├── voice/             # Swift voice process (SwiftPM; FluidAudio pinned exactly)
 │   └── Sources/VoiceHarnessVoice/
-│       ├── main.swift          # startup: mic permission, Kokoro warm-up, VAD, speech assets, command loop
+│       ├── main.swift          # startup: mic permission, speech warm-up, VAD, speech assets, command loop
 │       ├── Protocol.swift      # stdin commands / stdout events (JSON lines)
 │       ├── AudioIO.swift       # one AVAudioEngine: speech + tone players, 16 kHz mic tap
-│       ├── Speaker.swift       # sentence queue → Kokoro → playback; pause/resume/stop
+│       ├── Speaker.swift       # sentence queue → synthesis → playback; pause/resume/stop
+│       ├── SystemSpeech.swift  # text → samples in the Mac's system voice, via /usr/bin/say
 │       ├── LiveTranscription.swift # one live SpeechAnalyzer utterance
 │       └── Controller.swift    # listen / speak / interrupt state machine
 ├── tools/
-│   ├── fake-training.mjs # appends a falling loss to a .jsonl file, for trying live charts
-│   └── voice-sampler/ # local page for hearing every English Kokoro voice: `node tools/voice-sampler/server.mjs` → http://127.0.0.1:4317
+│   └── fake-training.mjs # appends a falling loss to a .jsonl file, for trying live charts
 ├── docs/              # specs and design documents
 │   └── MVP_SPEC.md    # MVP scope, architecture, build order, open questions
 └── spike/             # throwaway milestone spikes (not product code)
     ├── m0/            # ACP client ↔ claude-agent-acp + stdio MCP display tool; fixture/ is the demo workspace
-    └── m0b/           # Swift voice check: Kokoro TTS (FluidAudio) + Apple SpeechAnalyzer STT; RESULTS.md
+    ├── m0b/           # Swift voice check: Kokoro TTS (FluidAudio) + Apple SpeechAnalyzer STT; RESULTS.md
+    ├── higgs/         # Higgs Audio latency probe (probe.py, run through the gpu-broker); out/ holds its WAVs and timings.json
+    └── tts-battery/   # small-TTS listening battery: run_battery.sh renders sentences.txt through each FluidAudio backend
+                       #   into out/<model>/<n>.wav (WAVs, logs/ and .build/ gitignored); play.sh <n> plays one sentence
+                       #   across models; timings.json holds the measured speeds; refs/ holds the reference clips and presets
 ```
 
 Setup: `npm install --ignore-scripts && npm run build` (builds the TypeScript bundles and the Swift voice process).

@@ -6,7 +6,6 @@ export type VoiceEvent =
   | { event: "loading" }
   | {
       event: "ready";
-      voice: string;
       microphone: boolean;
       interruptions: boolean;
       voiceProcessing: boolean;
@@ -22,8 +21,7 @@ export type VoiceEvent =
   | { event: "speechIdle" }
   | { event: "spoke"; id: number }
   | { event: "marked"; id: number }
-  | { event: "rendered"; id: number; path: string; voice: string; ms: number; audioMs: number }
-  | { event: "voices"; voices: string[] }
+  | { event: "rendered"; id: number; path: string; ms: number; audioMs: number }
   | { event: "micWarming" }
   | { event: "listening" }
   | { event: "speechStart" }
@@ -41,9 +39,8 @@ export type VoiceEvent =
 export interface VoiceClientOptions {
   /** Absolute path of the VoiceHarnessVoice binary. */
   binary: string;
-  /** Folder holding the FluidAudio models (downloaded on first use). */
+  /** Folder holding the voice activity model (downloaded on first use). */
   modelsDirectory: string;
-  voice: string;
   /** macOS voice processing (echo cancellation) for use without headphones. */
   voiceProcessing: boolean;
   /** Pause speech automatically when the user starts talking over it. */
@@ -60,7 +57,7 @@ export class VoiceClient {
   private constructor(private readonly child: ChildProcess) {}
 
   static start(opts: VoiceClientOptions): VoiceClient {
-    const args = ["--models", opts.modelsDirectory, "--voice", opts.voice];
+    const args = ["--models", opts.modelsDirectory];
     if (opts.voiceProcessing) args.push("--voice-processing");
     if (opts.interruptions) args.push("--interruptions");
     const child = spawn(opts.binary, args, { stdio: ["pipe", "pipe", "pipe"] });

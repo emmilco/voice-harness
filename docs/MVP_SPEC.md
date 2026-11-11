@@ -47,8 +47,8 @@ Three parts, deliberately separated so the VS Code part stays thin (a later Zed 
  │  • spawns           │        │    via FluidAudio)        │
  │   claude-agent-acp  │        │  • STT (Apple             │
  │  • routes agent     │        │    SpeechAnalyzer)        │
- │    text → speech    │        │  • TTS (Kokoro via        │
- │  • editor/figure    │        │    FluidAudio), sentence  │
+ │    text → speech    │        │  • TTS (system voice via  │
+ │  • editor/figure    │        │    /usr/bin/say), sentence│
  │    MCP tools        │        │    queue, pause/resume    │
  └─────────────────────┘        │  • barge-in + backchannel │
                                 │    filter                 │
@@ -60,6 +60,8 @@ Three parts, deliberately separated so the VS Code part stays thin (a later Zed 
 **Decided — voice process transport (as built in M2/M3).** The extension launches the voice process as a child and speaks JSON lines over its stdin/stdout (`voice/Sources/VoiceHarnessVoice/Protocol.swift`, `core/src/voiceClient.ts`), instead of the separate local socket in the diagram: same separation, fewer moving parts.
 
 **Decided — voice on the Neural Engine.** STT, TTS and VAD run on the Apple Neural Engine, never the GPU, so the voice loop does not contend with LLM training and stays outside gpu-broker's scope. Gated by the M0b check (§6); fallback if M0b fails: a Python voice process running faster-whisper and Kokoro on CPU.
+
+**Decided — speech in the system voice (2026-11-11, Elliot).** Kokoro is removed; replies are spoken in the Mac's system voice (System Settings → Accessibility → Read & Speak), chosen for the Siri voice after a side-by-side battery of small TTS models (`spike/tts-battery/`). As built: the voice process renders each sentence with `/usr/bin/say` to a temporary 48 kHz WAV and plays it through its own audio engine, so stop, pause, markers and echo cancellation are unchanged. It cannot synthesize Siri voices itself: the speech framework lists them only to Apple-signed processes (a compiled probe saw 180 voices and no Siri voice; the same code under the `swift` interpreter saw 188, Siri included). No voice is ever named to `say`, which speaks in a default voice when given a name it does not know. Where the system synthesizer runs (Neural Engine or otherwise) is Apple's choice and was not measured; STT and VAD are as decided above.
 
 ### 4.1 Agent connection (ACP)
 
@@ -119,7 +121,7 @@ Harness sessions use Elliot's normal Claude Code allow-list (decided): anything 
 ## 5. Isolation classification (AISP)
 
 - Claude via ACP: attended, acting (shell/writes), main account; permission prompts always surfaced; no bypass modes. Compliant.
-- STT/TTS/VAD models: fixed-prompt (audio → text, text → audio; no actions) → main account, on the Neural Engine.
+- STT/VAD models and the system speech voice: fixed-prompt (audio → text, text → audio; no actions) → main account.
 - Future local open-weight agents: agentic → must run in the `aiuser` sandbox. Out of MVP scope; the core's agent-launch code should allow a launch-as-different-user command when that arrives.
 
 ## 6. Build order

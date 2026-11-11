@@ -3,7 +3,7 @@
 Talk with Claude Code out loud inside VS Code. Claude answers in speech and text, highlights the code it is talking about as it talks, walks through code one small piece at a time, and shows charts and diagrams in the chat.
 
 - **Voice in:** press Talk (`Ctrl+Shift+Space`), speak, press Send. Transcription runs on your Mac (Apple SpeechAnalyzer).
-- **Voice out:** replies are spoken with Kokoro on the Neural Engine. Code, tables and status blocks are shown, not read aloud.
+- **Voice out:** replies are spoken in your Mac's system voice (System Settings → Accessibility → Read & Speak), Siri voices included. Code, tables and status blocks are shown, not read aloud.
 - **Code in step with speech:** `show_code` and `explain_code` highlight lines in your editor at the moment the matching words are spoken.
 - **Figures:** Vega-Lite charts, Mermaid diagrams, SVG and image files render in the chat.
 - **Your Claude Code setup:** the agent is your installed `claude` CLI (through the Agent Client Protocol adapter), with your settings, permissions and `CLAUDE.md` files. Permission requests appear as buttons.
@@ -25,7 +25,7 @@ scripts/install-extension.sh
 
 Then run **Developer: Reload Window** in open VS Code windows. Re-run the script at any time to rebuild and update.
 
-The first time the panel opens, macOS asks for microphone access for VS Code, and the speech models (about 400 MB) download into `~/Library/Application Support/voice-harness/models`.
+The first time the panel opens, macOS asks for microphone access for VS Code, and a small voice activity model (about 1 MB) downloads into `~/Library/Application Support/voice-harness/models`.
 
 ## Use
 
@@ -47,13 +47,12 @@ Open a folder, then run **Voice Harness: Open Panel** from the command palette. 
 
 | Setting | Default | |
 |---|---|---|
-| `voiceHarness.voice` | `af_heart` | Kokoro voice. Hear them all with `node tools/voice-sampler/server.mjs`, then open http://127.0.0.1:4317 |
 | `voiceHarness.speakReplies` | `true` | Speak replies when the panel opens |
 | `voiceHarness.conversationMode` | `true` | Auto-listen: after a spoken reply, listen for your answer; a pause (about 1.7 s, longer mid-sentence) sends it |
 | `voiceHarness.sendEditorContext` | `true` | Send the open file, cursor and selection with each message |
 | `voiceHarness.autoInterrupt` | `false` | Pause speech automatically when you start talking over it |
 | `voiceHarness.echoCancellation` | `false` | macOS echo cancellation, for use with speakers instead of headphones |
-| `voiceHarness.modelsDirectory` | *(empty)* | Where speech models live; empty means `~/Library/Application Support/voice-harness/models` |
+| `voiceHarness.modelsDirectory` | *(empty)* | Where the voice activity model lives; empty means `~/Library/Application Support/voice-harness/models` |
 | `voiceHarness.nodePath`, `voiceHarness.claudePath` | *(empty)* | Paths to `node` and `claude`; empty means found through your login shell |
 
 ## Billing and data

@@ -59,7 +59,6 @@ const voice = SPEAK
   ? VoiceClient.start({
       binary: VOICE_BIN,
       modelsDirectory: path.join(process.env.HOME ?? "", "Library", "Application Support", "voice-harness", "models"),
-      voice: "af_heart",
       voiceProcessing: false,
       interruptions: false,
       onEvent: (e) => {

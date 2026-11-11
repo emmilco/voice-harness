@@ -22,7 +22,6 @@ actor Controller {
     private let speaker: Speaker
     private let vad: VadManager?
     private let locale: Locale
-    private let defaultVoice: String
     private let interruptions: Bool
     private var segmentation: VadSegmentationConfig
 
@@ -38,8 +37,7 @@ actor Controller {
     private var levelPeak: Float = 0
     private var lastLevelEmit = Date.distantPast
 
-    init(audio: AudioIO, speaker: Speaker, vad: VadManager?, locale: Locale, defaultVoice: String, interruptions: Bool) {
-        self.defaultVoice = defaultVoice
+    init(audio: AudioIO, speaker: Speaker, vad: VadManager?, locale: Locale, interruptions: Bool) {
         self.interruptions = interruptions
         self.audio = audio
         self.speaker = speaker
@@ -60,22 +58,22 @@ actor Controller {
             if let id = command.id { await speaker.enqueueMark(id: id) }
         case "render":
             guard let id = command.id, let text = command.text, let path = command.path else { return }
-            let voice = command.voice ?? defaultVoice
-            let speaker = self.speaker
+            // A synthesizer of its own, so rendering never supersedes speech in flight.
+            let speech = SystemSpeech(sampleRate: AudioIO.speechRate)
             Task {
+                let started = Date()
+                let samples = await speech.render(text)
                 do {
-                    let (samples, ms) = try await speaker.render(text: text, voice: voice)
+                    guard !samples.isEmpty else { throw CocoaError(.fileReadUnknown) }
                     try WavFile.write(samples: samples, sampleRate: Int(AudioIO.speechRate), to: URL(fileURLWithPath: path))
-                    Events.emit("rendered", ["id": id, "path": path, "voice": voice, "ms": ms,
+                    Events.emit("rendered", ["id": id, "path": path, "ms": Int(Date().timeIntervalSince(started) * 1000),
                                              "audioMs": Int(Double(samples.count) / AudioIO.speechRate * 1000)])
                 } catch {
-                    Events.emit("error", ["id": id, "message": "render failed for \(voice): \(error.localizedDescription)"])
+                    Events.emit("error", ["id": id, "message": "render failed: no audio for this text"])
                 }
             }
         case "cue":
             audio.playAttentionTone()
-        case "listVoices":
-            Events.emit("voices", ["voices": KokoroAneVariant.english.knownVoices])
         case "stopSpeaking":
             if mode == .interrupting { await dropTranscription() }
             await speaker.stop()

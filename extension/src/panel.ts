@@ -549,7 +549,6 @@ export class HarnessPanel implements vscode.Disposable, TabServices {
     this.voice = VoiceClient.start({
       binary,
       modelsDirectory,
-      voice: config.get<string>("voice") || "af_heart",
       voiceProcessing: config.get<boolean>("echoCancellation", false),
       interruptions: config.get<boolean>("autoInterrupt", false),
       onEvent: (e) => this.onVoiceEvent(e),
@@ -682,7 +681,6 @@ export class HarnessPanel implements vscode.Disposable, TabServices {
         break;
       }
       case "rendered":
-      case "voices":
         break;
       case "error":
         if (this.voiceState === "warming") this.setVoice("idle", mic());

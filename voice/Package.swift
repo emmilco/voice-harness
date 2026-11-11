@@ -5,7 +5,7 @@ let package = Package(
     name: "VoiceHarnessVoice",
     platforms: [.macOS("26.0")],
     dependencies: [
-        .package(url: "https://github.com/FluidInference/FluidAudio.git", exact: "0.18.2", traits: ["TTS"]),
+        .package(url: "https://github.com/FluidInference/FluidAudio.git", exact: "0.18.2", traits: []),
     ],
     targets: [
         .executableTarget(

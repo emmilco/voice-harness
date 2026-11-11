@@ -58,11 +58,6 @@
           "default": "",
           "description": "Absolute path to the claude CLI. Empty: resolve via a login shell."
         },
-        "voiceHarness.voice": {
-          "type": "string",
-          "default": "af_heart",
-          "description": "Kokoro voice for spoken replies (hear them all with tools/voice-sampler). Run Voice Harness: Restart Speech to apply."
-        },
         "voiceHarness.speakReplies": {
           "type": "boolean",
           "default": true,
@@ -76,7 +71,7 @@
         "voiceHarness.modelsDirectory": {
           "type": "string",
           "default": "",
-          "description": "Folder for the speech models (downloaded on first use). Empty: ~/Library/Application Support/voice-harness/models. Run Voice Harness: Restart Speech to apply."
+          "description": "Folder for the voice activity model used to detect interruptions (downloaded on first use). Empty: ~/Library/Application Support/voice-harness/models. Run Voice Harness: Restart Speech to apply."
         },
         "voiceHarness.autoInterrupt": {
           "type": "boolean",
