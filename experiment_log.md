@@ -136,3 +136,9 @@ Hypothesis: the harness look was rendering in Inter, the face named in look-harn
 Tried: a font comparison page (Inter, IBM Plex Sans, Seravek at 15 and 16 px) rendered in headless Chrome.
 Outcome: the "Inter" samples rendered in Chrome's default serif: the one Inter file on this Mac does not resolve by that family name, so the fallback chain fell through to serif. IBM Plex Sans (full family installed) and Seravek rendered as named.
 Learning: the panel's prose has been in a fallback serif through attempts 21-22 and the harness look; "the letterspacing looks good now" was about that serif rendered with system smoothing, not Inter. Corrective: Plex Sans at 16 px (Butterick's range; 15 looked like UI text next to it), Seravek then system fallbacks. Closed. Lesson: a font stack is a hypothesis until a render confirms the family actually loaded.
+
+## Attempt 24 — 2026-11-10 21:00:00
+Hypothesis: "drab" was a palette problem; two stronger palettes (teal lamplight, navy/amber ink) would fix it.
+Tried: both rendered from the mock; shown to Elliot.
+Outcome: "neither!" Elliot's references, asked for afterwards: FT, claude.ai, Bluesky, Claude Code in iTerm, Tschichold/Garamond. Dark theme wanted.
+Learning: the references share restraint and typographic character, not colour; both palettes cured the wrong thing. Earlier serif failures (attempts 21-22) were size and rendering (14 px, forced-thin), not serifs as such: four book faces at 17 px with system rendering all read well (out/serifs.png). The harness look is now a dark page: Hoefler Text 17 px (Athelas fallback), Plex Sans chrome, one terracotta accent for the voice, rules instead of glows. Rendered and reviewed before showing. Pending Elliot's verdict.
