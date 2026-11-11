@@ -31,9 +31,13 @@ body.look-harness {
   --vh-pad: 18px;
   --vh-prose: "Inter", "Inter Variable", -apple-system, "SF Pro Text", system-ui, sans-serif;
 
+  /* Practical Typography: body 15 px, line spacing 140%, a three-size scale (15 / 13 / 12). */
+  --vh-size-body: 15px;
+  --vh-size-secondary: 13px;
+  --vh-size-small: 12px;
   font-family: var(--vh-prose);
-  font-size: 14px;
-  line-height: 1.6;
+  font-size: var(--vh-size-secondary);
+  line-height: 1.4;
   font-feature-settings: "cv11", "ss01", "calt";
   color: var(--vh-text);
   background: var(--vh-page);
@@ -62,7 +66,7 @@ body.look-harness.vscode-light, body.look-harness.vscode-high-contrast-light {
 body.look-harness .tabs { padding: 12px var(--vh-pad) 4px; border-bottom: none; gap: 6px; }
 body.look-harness .tab-list { gap: 6px; }
 body.look-harness .tab {
-  padding: 4px 11px; border-radius: 999px; font-size: 12.5px; gap: 5px; max-width: 240px;
+  padding: 4px 11px; border-radius: 999px; font-size: var(--vh-size-secondary); gap: 5px; max-width: 240px;
   color: var(--vh-quiet); box-shadow: none; background: var(--vh-tint);
 }
 /* Background tabs show just their project; the active one adds its title. */
@@ -72,7 +76,7 @@ body.look-harness .tab:not(.active) .tab-close { display: none; }
 body.look-harness .tab .tab-label { gap: 7px; }
 body.look-harness .tab:hover { background: var(--vh-tint); color: var(--vh-text); }
 body.look-harness .tab.active { color: var(--vh-text); background: var(--vh-tint-strong); box-shadow: none; }
-body.look-harness .tab-project { font-size: 12.5px; font-weight: 500; color: var(--vh-text); }
+body.look-harness .tab-project { font-weight: 500; color: var(--vh-text); }
 body.look-harness .tab-project::after { content: ""; margin: 0; }
 body.look-harness .tab:not(.active) .tab-project::after { display: none; }
 body.look-harness .tab.active .tab-project { color: var(--vh-accent); }
@@ -82,21 +86,22 @@ body.look-harness .tab-close { width: 16px; height: 16px; border-radius: 50%; }
 body.look-harness .icon-button { width: 28px; height: 28px; border-radius: 50%; }
 
 body.look-harness .head { padding: 14px var(--vh-pad) 2px; }
-body.look-harness .conversation-title { font-size: 15px; font-weight: 600; letter-spacing: -0.01em; }
-body.look-harness .usage { font-size: 11.5px; }
+body.look-harness .conversation-title { font-size: var(--vh-size-body); font-weight: 600; }
+body.look-harness .usage { font-size: var(--vh-size-small); }
 
 /* ---------------------------------------------------------------- prose */
 
 body.look-harness .log { padding: 6px var(--vh-pad) 20px; }
 body.look-harness .message { margin-bottom: 18px; }
-body.look-harness .message.agent { max-width: 62ch; font-size: 14.5px; line-height: 1.62; }
+body.look-harness .message.agent { max-width: 62ch; font-size: var(--vh-size-body); line-height: 1.4; }
 body.look-harness .message p { margin-bottom: 0.8em; }
-body.look-harness .message a { color: var(--vh-link); text-decoration: none; border-bottom: 1px solid rgba(127, 200, 187, 0.4); }
+body.look-harness .message a { color: var(--vh-link); text-decoration: none; }
+body.look-harness .message a:hover { text-decoration: underline; text-underline-offset: 2px; }
 body.look-harness .message strong { font-weight: 600; }
 body.look-harness .message code { font-size: 0.86em; background: var(--vh-tint-strong); border-radius: 4px; }
-body.look-harness .message pre { background: var(--vh-code-bg); border: 1px solid var(--vh-line); font-size: 12.5px; }
+body.look-harness .message pre { background: var(--vh-code-bg); border: 1px solid var(--vh-line); font-size: var(--vh-size-small); line-height: 1.45; }
 body.look-harness .message pre code { background: none; }
-body.look-harness .message h1, body.look-harness .message h2, body.look-harness .message h3 { font-size: 14.5px; }
+body.look-harness .message h1, body.look-harness .message h2, body.look-harness .message h3 { font-size: var(--vh-size-body); font-weight: 600; }
 body.look-harness .message th, body.look-harness .message td { border-bottom-color: var(--vh-line); }
 
 /* The sentence being read aloud: lit, not barred. */
@@ -110,34 +115,36 @@ body.look-harness .message.user {
   border-radius: 10px;
   background: var(--vh-tint);
   border: 1px solid var(--vh-line);
-  font-size: 14px;
+  font-size: var(--vh-size-body);
+  line-height: 1.4;
 }
 body.look-harness .message.user.spoken::before { background: var(--vh-accent); }
-body.look-harness .context-chip { font-size: 11.5px; }
+body.look-harness .context-chip { font-size: var(--vh-size-small); }
 
 body.look-harness .message.step { border-left: 2px solid var(--vh-line); padding-left: 12px; }
-body.look-harness .step-ref { color: var(--vh-link); font-size: 11.5px; }
+body.look-harness .step-ref { color: var(--vh-link); font-size: var(--vh-size-small); }
+body.look-harness .step-body { font-size: var(--vh-size-body); line-height: 1.4; }
 
-body.look-harness .onscreen { font-size: 12px; }
+body.look-harness .onscreen { font-size: var(--vh-size-small); }
 body.look-harness .onscreen > summary { opacity: 0.8; }
 body.look-harness .onscreen > summary::before { content: "›"; }
 body.look-harness .onscreen[open] > summary::before { transform: rotate(90deg); }
 
-body.look-harness .notice { font-size: 12.5px; }
-body.look-harness .empty-state { font-size: 13.5px; }
-body.look-harness .empty-title { font-size: 15px; }
+body.look-harness .notice { font-size: var(--vh-size-secondary); }
+body.look-harness .empty-state { font-size: var(--vh-size-secondary); }
+body.look-harness .empty-title { font-size: var(--vh-size-body); }
 
 /* ---------------------------------------------------------------- tool activity */
 
-body.look-harness .tool-head { font-size: 12.5px; padding: 3px 6px; margin-left: -6px; border-radius: 6px; width: auto; max-width: 100%; }
-body.look-harness .tool-title { font-size: 12px; flex: 0 1 auto; }
+body.look-harness .tool-head { font-size: var(--vh-size-secondary); padding: 3px 6px; margin-left: -6px; border-radius: 6px; width: auto; max-width: 100%; }
+body.look-harness .tool-title { font-size: var(--vh-size-small); flex: 0 1 auto; }
 body.look-harness .tool-status { margin-left: 2px; }
-body.look-harness .tool-body { background: var(--vh-code-bg); border: 1px solid var(--vh-line); font-size: 12.5px; }
+body.look-harness .tool-body { background: var(--vh-code-bg); border: 1px solid var(--vh-line); font-size: var(--vh-size-secondary); }
 body.look-harness .tool-status.running { color: var(--vh-accent); }
 
 body.look-harness .permission { border-color: var(--vh-attention); background: rgba(224, 160, 74, 0.06); border-radius: 10px; }
-body.look-harness .permission-title { font-size: 14px; }
-body.look-harness .secondary, body.look-harness .allow { padding: 5px 12px; border-radius: 999px; font-size: 13px; font-weight: 500; }
+body.look-harness .permission-title { font-size: var(--vh-size-body); }
+body.look-harness .secondary, body.look-harness .allow { padding: 5px 12px; border-radius: 999px; font-size: var(--vh-size-secondary); font-weight: 500; }
 body.look-harness .secondary { color: var(--vh-text); background: var(--vh-tint-strong); }
 body.look-harness .secondary:hover:not(:disabled) { background: var(--vh-line); }
 body.look-harness .allow { color: var(--vh-accent-text); background: var(--vh-accent); }
@@ -146,12 +153,12 @@ body.look-harness .allow:hover:not(:disabled) { filter: brightness(1.08); }
 /* ---------------------------------------------------------------- composer */
 
 body.look-harness .composer { padding: 10px var(--vh-pad) 14px; border-top: 1px solid var(--vh-line); background: var(--vh-page); }
-body.look-harness .statusline { font-size: 12.5px; }
+body.look-harness .statusline { font-size: var(--vh-size-secondary); }
 body.look-harness .status.busy { color: var(--vh-text); }
 body.look-harness .voice.listening { color: var(--vh-accent); }
 
 body.look-harness textarea {
-  font-family: var(--vh-prose); font-size: 14px;
+  font-family: var(--vh-prose); font-size: var(--vh-size-body); line-height: 1.4;
   color: var(--vh-text); background: var(--vh-tint);
   border: 1px solid var(--vh-line); border-radius: 12px;
   padding: 10px 12px;
@@ -164,10 +171,10 @@ body.look-harness .toolbar { margin-top: 10px; gap: 8px; flex-wrap: wrap; }
 /* Session settings sit on their own quiet row below the controls. */
 body.look-harness .session-bar { order: 10; flex-basis: 100%; margin-top: 2px; }
 body.look-harness .options { gap: 0; }
-body.look-harness .option-select { font-size: 12px; color: var(--vh-quiet); border-radius: 6px; padding: 2px 6px; max-width: none; }
+body.look-harness .option-select { font-size: var(--vh-size-small); color: var(--vh-quiet); border-radius: 6px; padding: 2px 6px; max-width: none; }
 body.look-harness .option-select:hover { color: var(--vh-text); background: var(--vh-tint-strong); }
 body.look-harness .option-select + .option-select::before { content: "·"; }
-body.look-harness .option-toggle { font-size: 12px; margin-left: 2px; }
+body.look-harness .option-toggle { font-size: var(--vh-size-small); margin-left: 2px; }
 body.look-harness .option-toggle input { accent-color: var(--vh-accent); }
 
 /* The mic: a presence. */
