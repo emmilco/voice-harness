@@ -127,6 +127,21 @@
             "Colours and fonts from the editor's theme"
           ],
           "description": "How the panel looks. Applies immediately."
+        },
+        "voiceHarness.page": {
+          "type": "string",
+          "enum": [
+            "light",
+            "dark",
+            "editor"
+          ],
+          "default": "light",
+          "enumDescriptions": [
+            "A cream reading page, whatever the editor's theme",
+            "The same page at night",
+            "Light or dark to match the editor's theme"
+          ],
+          "description": "The page colour of the harness look. Applies immediately."
         }
       }
     },

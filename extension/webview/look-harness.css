@@ -1,34 +1,41 @@
 /*
- * The "harness" look: a dark page, not a dark app.
+ * The "harness" look: a page, not an app.
  *
  * The references are the Financial Times, claude.ai, Bluesky, a terminal, and Tschichold: none
  * of them is decorated. Life comes from a typeface with a voice and a ground with warmth, not
- * from colour. So: prose in a book serif at 17 px (Hoefler Text, in the Garamond tradition;
- * Athelas as the screen-native fallback), chrome in a quiet sans, one terracotta accent used
- * for the voice and nothing else, and the passage being read aloud marked by a thin rule in the
- * margin rather than a glow. Asymmetric: everything hangs from one left axis.
+ * from colour. So: prose in a book serif at 17 px (Hoefler Text, in the Garamond tradition),
+ * chrome in a quiet sans, one terracotta accent used for the voice and for what asks the
+ * reader's attention, and the passage being read aloud marked by a thin rule in the margin
+ * rather than a glow. Asymmetric: everything hangs from one left axis.
+ *
+ * The page is light by default, whatever the editor's theme: a cream reading page beside a
+ * dark editor is a deliberate pairing, and dark text on paper does not bloom the way light text
+ * on ink does, so the serif keeps its weight without turning heavy. `voiceHarness.page`
+ * chooses light, dark, or following the editor theme.
  *
  * Loaded after style.css; it overrides the token layer, so the structure rules keep working.
  */
 
 body.look-harness {
-  /* Ink with warmth: the FT's paper, printed at night. */
-  --vh-text: #ece6d9;
-  --vh-quiet: #948b7d;
-  --vh-page: #161412;
-  --vh-tint: rgba(236, 230, 217, 0.045);
-  --vh-tint-strong: rgba(236, 230, 217, 0.08);
-  --vh-line: rgba(236, 230, 217, 0.13);
-  --vh-rule: rgba(236, 230, 217, 0.22);
-  --vh-accent: #d98a5b;
-  --vh-accent-soft: rgba(217, 138, 91, 0.16);
-  --vh-accent-text: #1f1510;
-  --vh-attention: #d98a5b;
-  --vh-ok: #d98a5b;
-  --vh-error: #d9756a;
-  --vh-link: #d9b48a;
-  --vh-code-bg: #100f0d;
-  --vh-glow: rgba(217, 138, 91, 0.4);
+  /* Paper: warm cream, ink text. */
+  --vh-text: #2e2924;
+  --vh-text-strong: #1c1815;
+  --vh-quiet: #7c7265;
+  --vh-page: #f7f2e9;
+  --vh-tint: rgba(38, 33, 28, 0.04);
+  --vh-tint-strong: rgba(38, 33, 28, 0.075);
+  --vh-line: rgba(38, 33, 28, 0.13);
+  --vh-rule: rgba(38, 33, 28, 0.3);
+  --vh-accent: #b9603a;
+  --vh-accent-soft: rgba(185, 96, 58, 0.13);
+  --vh-accent-text: #ffffff;
+  --vh-attention: #b9603a;
+  --vh-ok: #b9603a;
+  --vh-error: #b4463a;
+  --vh-link: #9a4f2a;
+  --vh-code-bg: #efe9dd;
+  --vh-glow: rgba(185, 96, 58, 0.3);
+  --vh-menu: #fffcf6;
   --vh-radius: 4px;
   --vh-pad: 22px;
 
@@ -45,24 +52,26 @@ body.look-harness {
   background: var(--vh-page);
 }
 
-/* Light theme: the same page by day. */
-body.look-harness.vscode-light, body.look-harness.vscode-high-contrast-light {
-  --vh-text: #26211c;
-  --vh-quiet: #7c7265;
-  --vh-page: #f7f2e9;
-  --vh-tint: rgba(38, 33, 28, 0.04);
-  --vh-tint-strong: rgba(38, 33, 28, 0.075);
-  --vh-line: rgba(38, 33, 28, 0.13);
-  --vh-rule: rgba(38, 33, 28, 0.3);
-  --vh-accent: #b9603a;
-  --vh-accent-soft: rgba(185, 96, 58, 0.13);
-  --vh-accent-text: #ffffff;
-  --vh-attention: #b9603a;
-  --vh-ok: #b9603a;
-  --vh-error: #b4463a;
-  --vh-link: #9a4f2a;
-  --vh-code-bg: #efe9dd;
-  --vh-glow: rgba(185, 96, 58, 0.3);
+/* The same page at night: ink with warmth. Prose a shade below white, since light text blooms. */
+body.look-harness.page-dark {
+  --vh-text: #d9d2c3;
+  --vh-text-strong: #ece6d9;
+  --vh-quiet: #908778;
+  --vh-page: #161412;
+  --vh-tint: rgba(236, 230, 217, 0.045);
+  --vh-tint-strong: rgba(236, 230, 217, 0.08);
+  --vh-line: rgba(236, 230, 217, 0.13);
+  --vh-rule: rgba(236, 230, 217, 0.22);
+  --vh-accent: #d98a5b;
+  --vh-accent-soft: rgba(217, 138, 91, 0.16);
+  --vh-accent-text: #1f1510;
+  --vh-attention: #d98a5b;
+  --vh-ok: #d98a5b;
+  --vh-error: #d9756a;
+  --vh-link: #d9b48a;
+  --vh-code-bg: #100f0d;
+  --vh-glow: rgba(217, 138, 91, 0.4);
+  --vh-menu: #1e1b18;
 }
 
 /* ---------------------------------------------------------------- chrome */
@@ -88,7 +97,7 @@ body.look-harness .icon-button { width: 26px; height: 26px; border-radius: 3px; 
 body.look-harness .tabs .icon-button { align-self: flex-start; margin-top: 1px; }
 
 body.look-harness .head { padding: 22px var(--vh-pad) 6px; }
-body.look-harness .conversation-title { font-family: var(--vh-serif); font-size: 21px; font-weight: 400; line-height: 1.25; white-space: normal; }
+body.look-harness .conversation-title { font-family: var(--vh-serif); font-size: 21px; font-weight: 400; line-height: 1.25; white-space: normal; color: var(--vh-text-strong); }
 body.look-harness .usage { font-size: var(--vh-size-small); font-variant-numeric: tabular-nums; }
 
 /* ---------------------------------------------------------------- prose */
@@ -98,7 +107,7 @@ body.look-harness .message { margin-bottom: 20px; }
 body.look-harness .message.agent, body.look-harness .step-body {
   font-family: var(--vh-serif);
   font-size: var(--vh-size-prose);
-  line-height: 1.42;
+  line-height: 1.5;
   max-width: 56ch;
   font-kerning: normal;
   font-variant-numeric: oldstyle-nums proportional-nums;
@@ -106,7 +115,7 @@ body.look-harness .message.agent, body.look-harness .step-body {
 body.look-harness .message p { margin-bottom: 0.75em; }
 body.look-harness .message a { color: var(--vh-link); text-decoration: none; }
 body.look-harness .message a:hover { text-decoration: underline; text-underline-offset: 3px; }
-body.look-harness .message strong { font-weight: 700; }
+body.look-harness .message strong { font-weight: 700; color: var(--vh-text-strong); }
 body.look-harness .message em { font-style: italic; }
 body.look-harness .message code { font-size: 0.78em; background: var(--vh-tint-strong); border-radius: 3px; padding: 0.1em 0.3em; font-variant-numeric: lining-nums; }
 body.look-harness .message pre { background: var(--vh-code-bg); border: 1px solid var(--vh-line); border-radius: 3px; font-size: var(--vh-size-small); line-height: 1.5; font-variant-numeric: lining-nums; }
@@ -222,10 +231,10 @@ body.look-harness .send.queue { color: var(--vh-quiet); background: var(--vh-tin
 body.look-harness .icon-button.toggle.on { color: var(--vh-text); }
 
 body.look-harness .completions, body.look-harness .session-menu {
-  background: #1e1b18; border-color: var(--vh-line); border-radius: 4px;
-  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+  background: var(--vh-menu); border-color: var(--vh-line); border-radius: 4px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.14);
 }
-body.look-harness.vscode-light .completions, body.look-harness.vscode-light .session-menu { background: #fffcf6; box-shadow: 0 8px 28px rgba(0, 0, 0, 0.12); }
+body.look-harness.page-dark .completions, body.look-harness.page-dark .session-menu { box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45); }
 body.look-harness .completion.selected { background: var(--vh-accent-soft); color: var(--vh-text); }
 body.look-harness .session-item:hover { background: var(--vh-tint); }
 body.look-harness .session-title { font-family: var(--vh-serif); font-size: 15px; }
@@ -233,18 +242,18 @@ body.look-harness .text-button { color: var(--vh-link); }
 
 /* ---------------------------------------------------------------- code colours (warm, low-saturation) */
 
-body.look-harness .hljs-keyword, body.look-harness .hljs-selector-tag, body.look-harness .hljs-literal, body.look-harness .hljs-built_in { color: #9fb7d8; }
-body.look-harness .hljs-string, body.look-harness .hljs-attr-value, body.look-harness .hljs-template-string, body.look-harness .hljs-addition { color: #d9a66f; }
-body.look-harness .hljs-number, body.look-harness .hljs-symbol { color: #b8c7a4; }
-body.look-harness .hljs-comment, body.look-harness .hljs-quote, body.look-harness .hljs-meta { color: #7f7a70; font-style: italic; }
-body.look-harness .hljs-title, body.look-harness .hljs-title.function_, body.look-harness .hljs-section { color: #e2cf9a; }
-body.look-harness .hljs-title.class_, body.look-harness .hljs-type { color: #d98a5b; }
-body.look-harness .hljs-variable, body.look-harness .hljs-params, body.look-harness .hljs-attr, body.look-harness .hljs-property { color: #cfc9bd; }
-body.look-harness .hljs-deletion { color: #d9756a; }
-body.look-harness.vscode-light .hljs-keyword, body.look-harness.vscode-light .hljs-selector-tag, body.look-harness.vscode-light .hljs-literal, body.look-harness.vscode-light .hljs-built_in { color: #2f5a93; }
-body.look-harness.vscode-light .hljs-string, body.look-harness.vscode-light .hljs-attr-value, body.look-harness.vscode-light .hljs-template-string, body.look-harness.vscode-light .hljs-addition { color: #9a5a14; }
-body.look-harness.vscode-light .hljs-number, body.look-harness.vscode-light .hljs-symbol { color: #4a7035; }
-body.look-harness.vscode-light .hljs-comment, body.look-harness.vscode-light .hljs-quote, body.look-harness.vscode-light .hljs-meta { color: #857d72; }
-body.look-harness.vscode-light .hljs-title, body.look-harness.vscode-light .hljs-title.function_, body.look-harness.vscode-light .hljs-section { color: #7a5c10; }
-body.look-harness.vscode-light .hljs-title.class_, body.look-harness.vscode-light .hljs-type { color: #b9603a; }
-body.look-harness.vscode-light .hljs-variable, body.look-harness.vscode-light .hljs-params, body.look-harness.vscode-light .hljs-attr, body.look-harness.vscode-light .hljs-property { color: #3f3a33; }
+body.look-harness.page-dark .hljs-keyword, body.look-harness.page-dark .hljs-selector-tag, body.look-harness.page-dark .hljs-literal, body.look-harness.page-dark .hljs-built_in { color: #9fb7d8; }
+body.look-harness.page-dark .hljs-string, body.look-harness.page-dark .hljs-attr-value, body.look-harness.page-dark .hljs-template-string, body.look-harness.page-dark .hljs-addition { color: #d9a66f; }
+body.look-harness.page-dark .hljs-number, body.look-harness.page-dark .hljs-symbol { color: #b8c7a4; }
+body.look-harness.page-dark .hljs-comment, body.look-harness.page-dark .hljs-quote, body.look-harness.page-dark .hljs-meta { color: #7f7a70; font-style: italic; }
+body.look-harness.page-dark .hljs-title, body.look-harness.page-dark .hljs-title.function_, body.look-harness.page-dark .hljs-section { color: #e2cf9a; }
+body.look-harness.page-dark .hljs-title.class_, body.look-harness.page-dark .hljs-type { color: #d98a5b; }
+body.look-harness.page-dark .hljs-variable, body.look-harness.page-dark .hljs-params, body.look-harness.page-dark .hljs-attr, body.look-harness.page-dark .hljs-property { color: #cfc9bd; }
+body.look-harness.page-dark .hljs-deletion { color: #d9756a; }
+body.look-harness .hljs-keyword, body.look-harness .hljs-selector-tag, body.look-harness .hljs-literal, body.look-harness .hljs-built_in { color: #2f5a93; }
+body.look-harness .hljs-string, body.look-harness .hljs-attr-value, body.look-harness .hljs-template-string, body.look-harness .hljs-addition { color: #9a5a14; }
+body.look-harness .hljs-number, body.look-harness .hljs-symbol { color: #4a7035; }
+body.look-harness .hljs-comment, body.look-harness .hljs-quote, body.look-harness .hljs-meta { color: #857d72; }
+body.look-harness .hljs-title, body.look-harness .hljs-title.function_, body.look-harness .hljs-section { color: #7a5c10; }
+body.look-harness .hljs-title.class_, body.look-harness .hljs-type { color: #b9603a; }
+body.look-harness .hljs-variable, body.look-harness .hljs-params, body.look-harness .hljs-attr, body.look-harness .hljs-property { color: #3f3a33; }

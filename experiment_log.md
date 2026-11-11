@@ -142,3 +142,9 @@ Hypothesis: "drab" was a palette problem; two stronger palettes (teal lamplight,
 Tried: both rendered from the mock; shown to Elliot.
 Outcome: "neither!" Elliot's references, asked for afterwards: FT, claude.ai, Bluesky, Claude Code in iTerm, Tschichold/Garamond. Dark theme wanted.
 Learning: the references share restraint and typographic character, not colour; both palettes cured the wrong thing. Earlier serif failures (attempts 21-22) were size and rendering (14 px, forced-thin), not serifs as such: four book faces at 17 px with system rendering all read well (out/serifs.png). The harness look is now a dark page: Hoefler Text 17 px (Athelas fallback), Plex Sans chrome, one terracotta accent for the voice, rules instead of glows. Rendered and reviewed before showing. Pending Elliot's verdict.
+
+## Attempt 25 — 2026-11-10 21:40:00
+Hypothesis: "too heavy" (Hoefler on the dark page) is the face's stroke weight; dimmer text, more leading, or a lighter face would fix it.
+Tried: six variants rendered side by side (out/weight.png); Athelas with dimmer text and 155% leading shown to Elliot in dark and light.
+Outcome: Elliot: light page is better, and Hoefler was better than Athelas.
+Learning: the heaviness was dark-mode bloom (light strokes bleeding on ink), not the face. On a cream page Hoefler keeps its substance without turning heavy. The harness look now defaults to a light page whatever the editor theme (voiceHarness.page: light | dark | editor), Hoefler Text 17 px, 150% leading. Closed; rendered and reviewed.

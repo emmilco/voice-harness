@@ -4,8 +4,10 @@ import { expressionInterpreter } from "vega-interpreter";
 
 export type FigureKind = "vega-lite" | "mermaid" | "svg" | "image";
 
+/** Whether figures should use dark styling: the harness page colour when that look is on, else the editor theme. */
 const dark = () => {
   const c = document.body.classList;
+  if (c.contains("look-harness")) return c.contains("page-dark");
   return c.contains("vscode-dark") || (c.contains("vscode-high-contrast") && !c.contains("vscode-high-contrast-light"));
 };
 

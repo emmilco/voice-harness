@@ -91,7 +91,7 @@ export type PanelMessage =
   /** The typeface for Claude's answers. */
   | { type: "reading"; font: "serif" | "sans" }
   /** Which look the panel wears: its own design, or the editor's theme. */
-  | { type: "look"; look: "harness" | "editor" };
+  | { type: "look"; look: "harness" | "editor"; page: "light" | "dark" };
 
 export type ToWebview = TabMessage | PanelMessage;
 

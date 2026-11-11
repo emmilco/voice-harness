@@ -888,6 +888,7 @@ function applyPanel(m: PanelMessage): void {
       break;
     case "look":
       document.body.classList.toggle("look-harness", m.look === "harness");
+      document.body.classList.toggle("page-dark", m.page === "dark");
       break;
   }
 }

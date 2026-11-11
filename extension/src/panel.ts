@@ -99,6 +99,7 @@ export class HarnessPanel implements vscode.Disposable, TabServices {
   readonly tracker: EditorTracker;
   private readonly diffs = new DiffView();
   private readonly configWatch: vscode.Disposable;
+  private readonly themeWatch: vscode.Disposable;
   private disposed = false;
 
   static readonly VIEW_ID = "voiceHarness.view";
@@ -202,9 +203,10 @@ export class HarnessPanel implements vscode.Disposable, TabServices {
     host.webview.html = this.html();
     host.webview.onDidReceiveMessage((m: FromWebview) => this.onMessage(m));
     host.onDidDispose(() => this.dispose());
+    this.themeWatch = vscode.window.onDidChangeActiveColorTheme(() => this.postLook());
     this.configWatch = vscode.workspace.onDidChangeConfiguration((e) => {
       if (e.affectsConfiguration("voiceHarness.readingFont")) this.postReadingFont();
-      if (e.affectsConfiguration("voiceHarness.look")) this.postLook();
+      if (e.affectsConfiguration("voiceHarness.look") || e.affectsConfiguration("voiceHarness.page")) this.postLook();
     });
   }
 
@@ -697,8 +699,12 @@ export class HarnessPanel implements vscode.Disposable, TabServices {
   }
 
   private postLook(): void {
-    const look = vscode.workspace.getConfiguration("voiceHarness").get<string>("look", "harness") === "editor" ? "editor" : "harness";
-    this.postPanel({ type: "look", look });
+    const config = vscode.workspace.getConfiguration("voiceHarness");
+    const look = config.get<string>("look", "harness") === "editor" ? "editor" : "harness";
+    const pageSetting = config.get<string>("page", "light");
+    const editorDark = [vscode.ColorThemeKind.Dark, vscode.ColorThemeKind.HighContrast].includes(vscode.window.activeColorTheme.kind);
+    const page = pageSetting === "dark" || (pageSetting === "editor" && editorDark) ? "dark" : "light";
+    this.postPanel({ type: "look", look, page });
   }
 
   private postReadingFont(): void {
@@ -799,6 +805,7 @@ export class HarnessPanel implements vscode.Disposable, TabServices {
     this.tracker.dispose();
     this.diffs.dispose();
     this.configWatch.dispose();
+    this.themeWatch.dispose();
   }
 }
 
