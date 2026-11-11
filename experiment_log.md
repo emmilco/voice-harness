@@ -130,3 +130,9 @@ Hypothesis: a different serif face (Georgia) would fix the loose look of the ans
 Tried: Georgia first, Iowan Old Style fallback; rendering and size unchanged from attempt 21.
 Outcome: Elliot: "still doesn't feel right" and doubts serif is right at all.
 Learning: four serifs (Charter, New York, Iowan, Georgia) plus the rendering fix all failed the same way. Serif at ~14 px in a narrow panel is the problem, not any one face. Closed: default back to the interface sans (the layout changes stay); serif remains available via voiceHarness.readingFont for a later look at larger sizes.
+
+## Attempt 23 — 2026-11-10 20:10:00
+Hypothesis: the harness look was rendering in Inter, the face named in look-harness.css.
+Tried: a font comparison page (Inter, IBM Plex Sans, Seravek at 15 and 16 px) rendered in headless Chrome.
+Outcome: the "Inter" samples rendered in Chrome's default serif: the one Inter file on this Mac does not resolve by that family name, so the fallback chain fell through to serif. IBM Plex Sans (full family installed) and Seravek rendered as named.
+Learning: the panel's prose has been in a fallback serif through attempts 21-22 and the harness look; "the letterspacing looks good now" was about that serif rendered with system smoothing, not Inter. Corrective: Plex Sans at 16 px (Butterick's range; 15 looked like UI text next to it), Seravek then system fallbacks. Closed. Lesson: a font stack is a hypothesis until a render confirms the family actually loaded.

@@ -29,16 +29,18 @@ body.look-harness {
   --vh-glow: rgba(63, 184, 165, 0.35);
   --vh-radius: 8px;
   --vh-pad: 18px;
-  --vh-prose: "Inter", "Inter Variable", -apple-system, "SF Pro Text", system-ui, sans-serif;
+  /* IBM Plex Sans: a text face (large x-height, open forms) that holds up over a paragraph. */
+  --vh-prose: "IBM Plex Sans", "Seravek", -apple-system, "SF Pro Text", system-ui, sans-serif;
 
-  /* Practical Typography: body 15 px, line spacing 140%, a three-size scale (15 / 13 / 12). */
-  --vh-size-body: 15px;
-  --vh-size-secondary: 13px;
+  /* Practical Typography: body 16 px (his floor is 15; this panel exists to be read), line
+     spacing 140%, a three-size scale (16 / 13.5 / 12). */
+  --vh-size-body: 16px;
+  --vh-size-secondary: 13.5px;
   --vh-size-small: 12px;
   font-family: var(--vh-prose);
   font-size: var(--vh-size-secondary);
   line-height: 1.4;
-  font-feature-settings: "cv11", "ss01", "calt";
+  font-feature-settings: "calt";
   color: var(--vh-text);
   background: var(--vh-page);
 }
@@ -93,7 +95,7 @@ body.look-harness .usage { font-size: var(--vh-size-small); }
 
 body.look-harness .log { padding: 6px var(--vh-pad) 20px; }
 body.look-harness .message { margin-bottom: 18px; }
-body.look-harness .message.agent { max-width: 62ch; font-size: var(--vh-size-body); line-height: 1.4; }
+body.look-harness .message.agent { max-width: 58ch; font-size: var(--vh-size-body); line-height: 1.42; }
 body.look-harness .message p { margin-bottom: 0.8em; }
 body.look-harness .message a { color: var(--vh-link); text-decoration: none; }
 body.look-harness .message a:hover { text-decoration: underline; text-underline-offset: 2px; }
