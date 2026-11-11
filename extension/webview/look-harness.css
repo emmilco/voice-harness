@@ -20,7 +20,7 @@ body.look-harness {
   /* Paper: warm cream, ink text. */
   --vh-text: #2e2924;
   --vh-text-strong: #1c1815;
-  --vh-quiet: #7c7265;
+  --vh-quiet: #625849;        /* 6.3:1 on the page: quiet, never a strain */
   --vh-page: #f7f2e9;
   --vh-tint: rgba(38, 33, 28, 0.04);
   --vh-tint-strong: rgba(38, 33, 28, 0.075);
@@ -44,8 +44,8 @@ body.look-harness {
   --vh-serif: "Hoefler Text", "Athelas", "Iowan Old Style", Georgia, serif;
   --vh-sans: "IBM Plex Sans", -apple-system, "SF Pro Text", system-ui, sans-serif;
   --vh-size-prose: 17px;
-  --vh-size-ui: 13px;
-  --vh-size-small: 12px;
+  --vh-size-ui: 13.5px;
+  --vh-size-small: 13px;
 
   font-family: var(--vh-sans);
   font-size: var(--vh-size-ui);
@@ -58,7 +58,7 @@ body.look-harness {
 body.look-harness.page-dark {
   --vh-text: #d9d2c3;
   --vh-text-strong: #ece6d9;
-  --vh-quiet: #908778;
+  --vh-quiet: #a39a8b;        /* 6.6:1 on the page */
   --vh-page: #161412;
   --vh-tint: rgba(236, 230, 217, 0.045);
   --vh-tint-strong: rgba(236, 230, 217, 0.08);
