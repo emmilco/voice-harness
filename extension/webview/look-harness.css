@@ -45,7 +45,8 @@ body.look-harness {
   --vh-serif: "Hoefler Text", "Athelas", "Iowan Old Style", Georgia, serif;
   --vh-sans: "IBM Plex Sans", -apple-system, "SF Pro Text", system-ui, sans-serif;
   --vh-size-prose: 17px;
-  --vh-size-ui: 13.5px;
+  --vh-size-mid: 15px;
+  --vh-size-ui: 13px;
   --vh-size-small: 13px;
 
   font-family: var(--vh-sans);
@@ -101,7 +102,8 @@ body.look-harness .tab-close { width: 16px; height: 16px; }
 body.look-harness .icon-button { width: 26px; height: 26px; border-radius: 3px; }
 body.look-harness .tabs .icon-button { align-self: flex-start; margin-top: 1px; }
 
-body.look-harness .head { padding: 22px var(--vh-pad) 6px; }
+body.look-harness .head { padding: 18px var(--vh-pad) 6px; min-height: 0; }
+body.look-harness .conversation-title[hidden] { display: none; }
 body.look-harness .conversation-title { font-family: var(--vh-serif); font-size: 21px; font-weight: 400; line-height: 1.25; white-space: normal; color: var(--vh-text-strong); }
 body.look-harness .usage { font-size: var(--vh-size-small); font-variant-numeric: tabular-nums; }
 
@@ -130,7 +132,10 @@ body.look-harness .message code {
 }
 body.look-harness .message pre { background: var(--vh-code-bg); border: 1px solid var(--vh-line); border-radius: 3px; font-size: var(--vh-size-small); line-height: 1.5; font-variant-numeric: lining-nums; }
 body.look-harness .message pre code { background: none; border: none; padding: 0; font-size: inherit; color: inherit; }
-body.look-harness .message h1, body.look-harness .message h2, body.look-harness .message h3 { font-size: inherit; font-weight: 400; font-style: italic; margin: 1.2em 0 0.4em; }
+body.look-harness .message h1, body.look-harness .message h2, body.look-harness .message h3 {
+  font-size: inherit; font-weight: 400; font-style: normal; margin: 1.2em 0 0.4em;
+  font-variant-caps: small-caps; letter-spacing: 0.04em;
+}
 body.look-harness .message table { font-family: var(--vh-sans); font-size: var(--vh-size-ui); font-variant-numeric: tabular-nums; }
 body.look-harness .message th, body.look-harness .message td { border-bottom-color: var(--vh-line); }
 body.look-harness .message ul, body.look-harness .message ol { padding-left: 1.2em; }
@@ -151,7 +156,7 @@ body.look-harness .message.user {
   padding: 8px 0 0;
   border: none; border-top: 1px solid var(--vh-rule); border-radius: 0;
   background: none;
-  font-family: var(--vh-sans); font-size: 14px; line-height: 1.45;
+  font-family: var(--vh-sans); font-size: var(--vh-size-mid); line-height: 1.45;
   color: var(--vh-text);
 }
 body.look-harness .message.user.spoken::before { background: var(--vh-accent); width: 5px; height: 5px; margin: 0 8px 2px 0; }
@@ -184,7 +189,7 @@ body.look-harness .tool-body { background: var(--vh-code-bg); border: 1px solid 
 /* Approvals: a rule, like the speaking passage, because it also asks for the reader's attention. */
 body.look-harness .permission { border: none; border-left: 2px solid var(--vh-accent); border-radius: 0; padding: 4px 0 4px 14px; margin: 8px 0 22px; background: none; }
 body.look-harness .permission.answered { border-left-color: var(--vh-line); opacity: 0.55; }
-body.look-harness .permission-title { font-family: var(--vh-sans); font-size: 14px; font-weight: 500; margin-bottom: 10px; }
+body.look-harness .permission-title { font-family: var(--vh-sans); font-size: var(--vh-size-mid); font-weight: 500; margin-bottom: 10px; }
 body.look-harness .secondary, body.look-harness .allow { border-radius: 3px; padding: 5px 12px; font-size: var(--vh-size-ui); font-weight: 500; }
 body.look-harness .secondary { color: var(--vh-text); background: var(--vh-tint-strong); }
 body.look-harness .secondary:hover:not(:disabled) { background: var(--vh-line); }
@@ -200,7 +205,7 @@ body.look-harness .status.approval { color: var(--vh-accent-ink); }
 body.look-harness .voice.listening, body.look-harness .voice.speaking { color: var(--vh-accent-ink); }
 
 body.look-harness textarea {
-  font-family: var(--vh-sans); font-size: 14px; line-height: 1.45;
+  font-family: var(--vh-sans); font-size: var(--vh-size-mid); line-height: 1.45;
   color: var(--vh-text); background: none;
   border: none; border-bottom: 1px solid var(--vh-rule); border-radius: 0;
   padding: 6px 0 8px;
@@ -214,7 +219,6 @@ body.look-harness .session-bar { order: 10; flex-basis: 100%; margin-top: 4px; }
 body.look-harness .options { gap: 0; }
 body.look-harness .option-select { font-size: var(--vh-size-small); color: var(--vh-quiet); border-radius: 3px; padding: 2px 5px; max-width: none; }
 body.look-harness .option-select:hover { color: var(--vh-text); background: var(--vh-tint); }
-body.look-harness .option-select + .option-select::before { content: "·"; }
 body.look-harness .option-toggle { font-size: var(--vh-size-small); margin-left: 2px; }
 body.look-harness .option-toggle input { accent-color: var(--vh-accent); }
 
@@ -247,7 +251,7 @@ body.look-harness .completions, body.look-harness .session-menu {
 body.look-harness.page-dark .completions, body.look-harness.page-dark .session-menu { box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45); }
 body.look-harness .completion.selected { background: var(--vh-accent-soft); color: var(--vh-text); }
 body.look-harness .session-item:hover { background: var(--vh-tint); }
-body.look-harness .session-title { font-family: var(--vh-serif); font-size: 15px; }
+body.look-harness .session-title { font-family: var(--vh-serif); font-size: var(--vh-size-mid); }
 body.look-harness .text-button { color: var(--vh-link); }
 
 /* ---------------------------------------------------------------- code colours (warm, low-saturation) */

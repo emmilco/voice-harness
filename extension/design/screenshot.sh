@@ -15,7 +15,7 @@ for look in $LOOKS; do
   for theme in $THEMES; do
     # A temporary copy of the mock with the body classes for this variant.
     tmp="$HERE/.mock-$look-$theme.html"
-    sed -E "s/<body class=\"[^\"]*\">/<body class=\"vscode-$theme$([ "$look" = harness ] && echo ' look-harness')$([ "$look" = harness ] && [ "$theme" = dark ] && echo ' page-dark')\">/" "$HERE/mock.html" > "$tmp"
+    sed -E "s/<html lang=\"en\">/<html lang=\"en\" class=\"vscode-$theme\">/; s/<body class=\"[^\"]*\">/<body class=\"vscode-$theme$([ "$look" = harness ] && echo ' look-harness')$([ "$look" = harness ] && [ "$theme" = dark ] && echo ' page-dark')\">/" "$HERE/mock.html" > "$tmp"
     "$CHROME" --headless=new --disable-gpu --hide-scrollbars --force-device-scale-factor=2 \
       --window-size=420,1000 --screenshot="$OUT/$look-$theme.png" "file://$tmp" 2>/dev/null
     rm -f "$tmp"

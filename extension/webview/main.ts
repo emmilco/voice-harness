@@ -35,6 +35,10 @@ md.renderer.rules.fence = (tokens, idx, options, env, self) => {
   return `<div class="code-block"><button class="copy-code" title="Copy">Copy</button>${defaultFence(tokens, idx, options, env, self)}</div>`;
 };
 
+// Tables sit in a scrolling wrapper so a wide one does not scroll the whole transcript.
+md.renderer.rules.table_open = () => '<div class="table-wrap"><table>';
+md.renderer.rules.table_close = () => "</table></div>";
+
 // One handler for every code block's Copy button, wherever it was rendered.
 document.addEventListener("click", (e) => {
   const button = (e.target as HTMLElement).closest(".copy-code");
@@ -241,12 +245,12 @@ class TabView {
         const bubble = div("message user", m.text);
         if (m.spoken) bubble.classList.add("spoken");
         if (m.context) {
-          const chip = div("context-chip", `📍 ${m.context}`);
+          const chip = div("context-chip", `◎ ${m.context}`);
           chip.title = "Your editor position was sent with this message";
           bubble.appendChild(chip);
         }
         for (const name of m.attachments ?? []) {
-          const chip = div("context-chip", `📎 ${name}`);
+          const chip = div("context-chip", `▣ ${name}`);
           chip.title = "Attached to this message";
           bubble.appendChild(chip);
         }
