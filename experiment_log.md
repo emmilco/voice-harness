@@ -118,3 +118,9 @@ Hypothesis: something in user settings or the adapter disables the task-list too
 Tried: read ~/.claude/settings.json deny rules, env and keys; searched the adapter for disallowedTools and TodoWrite.
 Outcome: no task-related deny rule or env var; the adapter only disallows AskUserQuestion (because the client does not declare elicitation support) and renders TodoWrite/Task* as plans.
 Learning: ruled out our wiring, user settings and the adapter. Remaining (inferred): this Claude Code build does not offer TodoWrite/Task* in Agent SDK sessions. Paused; options put to Elliot: a harness update_checklist tool plus the plan UI (recommended), plan UI only, or drop. Side finding: AskUserQuestion is unavailable in harness sessions until the client supports elicitation.
+
+## Attempt 21 — 2026-11-10 19:05:00
+Hypothesis: answers look loosely letter-spaced because the panel forced -webkit-font-smoothing: antialiased (thinner strokes) and a fractional size (1.07em); VS Code's own UI uses system rendering.
+Tried: removed the smoothing override; answer size set to the interface size + 1px (whole pixel); font unchanged (ui-serif / New York, Iowan Old Style fallback).
+Outcome: Elliot reports the spacing is still not right.
+Learning: rendering hypothesis not supported (n=1 visual judgement). Remaining candidate: the serif faces themselves at ~14px (Charter, then New York/Iowan; New York's small optical size is deliberately looser). Next: Georgia first, as Elliot asked.

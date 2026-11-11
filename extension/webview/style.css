@@ -170,10 +170,7 @@ svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width:
 
 /* Reading serif for answers and walkthrough steps (setting voiceHarness.readingFont). */
 body.reading-serif .message.agent, body.reading-serif .step-body {
-  /* New York (Apple's screen serif, which adjusts its spacing to the size) where the webview can
-     reach it, otherwise Iowan Old Style; both are tighter on screen than Charter. */
-  font-family: ui-serif, "New York", "Iowan Old Style", Georgia, serif;
-  font-optical-sizing: auto;
+  font-family: Georgia, "Iowan Old Style", serif;
   /* One pixel up from the interface size: a whole-pixel size draws letters on even positions. */
   font-size: calc(var(--vscode-font-size) + 1px);
   line-height: 1.62;
